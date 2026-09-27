@@ -17,6 +17,7 @@ import com.learn.mapper.QuestionOptionMapper;
 import com.learn.mapper.UserFavoriteMapper;
 import com.learn.service.QuestionService;
 import com.learn.util.MarkdownUtil;
+import com.learn.vo.QuestionAnswerVO;
 import com.learn.vo.QuestionListVO;
 import com.learn.vo.QuestionOptionVO;
 import com.learn.vo.QuestionPracticeVO;
@@ -86,6 +87,21 @@ public class QuestionServiceImpl implements QuestionService {
                 .eq(QuestionLike::getQuestionId, questionId)) > 0);
         Question full = questionMapper.selectById(questionId);
         vo.setLikeCount(full == null || full.getLikeCount() == null ? 0 : full.getLikeCount());
+        return vo;
+    }
+
+    @Override
+    public QuestionAnswerVO answer(Long questionId, Long userId) {
+        // 主动查看答案同样走统一 VIP 鉴权（文档 4.1：所有题目出口都过 checker）
+        Question question = checker.checkReadable(questionId, userId);
+        Question full = questionMapper.selectById(question.getId());
+        if (full == null) {
+            throw new BizException(ResultCode.NOT_FOUND);
+        }
+        QuestionAnswerVO vo = new QuestionAnswerVO();
+        vo.setAnswer(full.getAnswer());
+        vo.setAnswerText(full.getAnswerText());
+        vo.setAnalysis(full.getAnalysis());
         return vo;
     }
 

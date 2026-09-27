@@ -1,8 +1,16 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NInput, NModal, NSpin, NTag, useMessage } from 'naive-ui'
-import { questionDetail } from '@/api/question'
+import {
+  NButton,
+  NCollapseTransition,
+  NInput,
+  NModal,
+  NSpin,
+  NTag,
+  useMessage
+} from 'naive-ui'
+import { questionAnswer, questionDetail } from '@/api/question'
 import { toggleFavorite } from '@/api/favorite'
 import { noteDetail, saveNote } from '@/api/note'
 import MarkdownRender from '@/components/MarkdownRender.vue'
@@ -10,7 +18,7 @@ import OptionGroup from '@/components/OptionGroup.vue'
 import LikeButton from '@/components/LikeButton.vue'
 import VipBadge from '@/components/VipBadge.vue'
 import { difficultyLabel, difficultyTagType, typeLabel } from '@/utils/format'
-import type { QuestionPracticeVO } from '@/types'
+import type { QuestionAnswerVO, QuestionPracticeVO } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -27,6 +35,30 @@ const noteSaving = ref(false)
 // 收藏状态
 const favorited = ref(false)
 const favPending = ref(false)
+
+// 查看答案
+const showAnswer = ref(false)
+const answerLoading = ref(false)
+const answerData = ref<QuestionAnswerVO | null>(null)
+
+async function toggleAnswer() {
+  if (!question.value) return
+  if (showAnswer.value) {
+    showAnswer.value = false
+    return
+  }
+  if (answerData.value) {
+    showAnswer.value = true
+    return
+  }
+  answerLoading.value = true
+  try {
+    answerData.value = await questionAnswer(question.value.id)
+    showAnswer.value = true
+  } finally {
+    answerLoading.value = false
+  }
+}
 
 async function load() {
   loading.value = true
@@ -110,12 +142,28 @@ function goPractice() {
           disabled
         />
 
-        <div class="hint">
-          📌 刷题模式下提交作答后才可查看正确答案与解析
-        </div>
+        <n-collapse-transition :show="showAnswer">
+          <div v-if="answerData" class="answer-panel">
+            <div class="answer-block">
+              <span class="answer-label">正确答案</span>
+              <n-tag v-if="question.type !== 4" type="success" size="small">{{ answerData.answer }}</n-tag>
+              <MarkdownRender v-else :content="answerData.answerText || '（无参考答案）'" />
+            </div>
+            <div v-if="answerData.analysis" class="answer-block">
+              <span class="answer-label">题目解析</span>
+              <MarkdownRender :content="answerData.analysis" />
+            </div>
+            <div v-if="question.type === 4 && !answerData.answerText && !answerData.analysis" class="answer-empty">
+              暂无参考答案与解析
+            </div>
+          </div>
+        </n-collapse-transition>
 
         <div class="actions">
           <n-button type="primary" @click="goPractice">去刷题</n-button>
+          <n-button secondary type="info" :loading="answerLoading" @click="toggleAnswer">
+            {{ showAnswer ? '收起答案' : '查看答案' }}
+          </n-button>
           <n-button :type="favorited ? 'warning' : 'default'" secondary :loading="favPending" @click="onToggleFavorite">
             {{ favorited ? '★ 已收藏' : '☆ 收藏' }}
           </n-button>
@@ -172,6 +220,37 @@ function goPractice() {
 
 .hint {
   margin-top: 20px;
+  color: #999;
+  font-size: 13px;
+}
+
+.answer-panel {
+  margin-top: 20px;
+  background: #f7fbf9;
+  border: 1px solid #dcf1e7;
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+
+.answer-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.answer-block + .answer-block {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed #d8ece2;
+}
+
+.answer-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #18a058;
+}
+
+.answer-empty {
   color: #999;
   font-size: 13px;
 }

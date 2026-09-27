@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.learn.common.PageResult;
 import com.learn.common.Result;
 import com.learn.service.QuestionService;
+import com.learn.vo.QuestionAnswerVO;
 import com.learn.vo.QuestionListVO;
 import com.learn.vo.QuestionPracticeVO;
 import jakarta.annotation.Resource;
@@ -50,5 +51,11 @@ public class QuestionController {
     @GetMapping("/detail")
     public Result<QuestionPracticeVO> detail(@RequestParam("id") Long questionId) {
         return Result.ok(questionService.detail(questionId, StpUtil.getLoginIdAsLong()));
+    }
+
+    /** 主动查看答案与解析（详情页「查看答案」按钮；VIP 鉴权覆盖，详见 QuestionAnswerVO 权衡说明） */
+    @GetMapping("/answer")
+    public Result<QuestionAnswerVO> answer(@RequestParam("id") Long questionId) {
+        return Result.ok(questionService.answer(questionId, StpUtil.getLoginIdAsLong()));
     }
 }

@@ -91,6 +91,13 @@ export interface QuestionPracticeVO {
   likeCount?: number
 }
 
+/** 主动查看的答案与解析（GET /api/question/answer） */
+export interface QuestionAnswerVO {
+  answer: string
+  answerText: string
+  analysis: string
+}
+
 /** 提交答题后返回（含正确答案与解析） */
 export interface QuestionSubmitVO {
   questionId: number

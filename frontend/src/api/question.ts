@@ -1,5 +1,5 @@
 import { get, post, put } from './request'
-import type { PageResult, QuestionListVO, QuestionPracticeVO } from '@/types'
+import type { PageResult, QuestionAnswerVO, QuestionListVO, QuestionPracticeVO } from '@/types'
 
 export interface QuestionListParams {
   categoryId?: number
@@ -26,4 +26,9 @@ export function questionDetail(id: number) {
   return get<QuestionPracticeVO>('/question/detail', { id })
 }
 
-export default { listQuestion, searchQuestion, questionDetail }
+/** 主动查看答案与解析 */
+export function questionAnswer(id: number) {
+  return get<QuestionAnswerVO>('/question/answer', { id })
+}
+
+export default { listQuestion, searchQuestion, questionDetail, questionAnswer }
