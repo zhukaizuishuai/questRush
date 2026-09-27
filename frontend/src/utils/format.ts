@@ -49,3 +49,8 @@ export function formatDate(time?: string | null): string {
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
+
+/** 验证码图片 src 兼容：后端可能返回完整 data URL 或裸 base64 */
+export function captchaImageSrc(image: string): string {
+  return image.startsWith('data:') ? image : `data:image/png;base64,${image}`
+}

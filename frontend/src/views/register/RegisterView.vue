@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton, NForm, NFormItem, NInput, useMessage } from 'naive-ui'
 import { getCaptcha, register } from '@/api/auth'
+import { captchaImageSrc } from '@/utils/format'
 import type { CaptchaVO } from '@/types'
 
 const router = useRouter()
@@ -95,7 +96,7 @@ async function onSubmit() {
             <img
               v-if="captcha"
               class="captcha-img"
-              :src="`data:image/png;base64,${captcha.image}`"
+              :src="captchaImageSrc(captcha.image)"
               title="点击刷新验证码"
               @click="refreshCaptcha"
             />
