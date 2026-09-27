@@ -23,7 +23,8 @@ public interface QuestionMapper extends BaseMapper<Question> {
 
     /**
      * 前台题目列表 / 搜索（文档 4.1：SQL 层按权限过滤 is_vip）。
-     * vipFilter = true 时只查免费题；返回 QuestionListVO（不含答案字段）。
+     * vipFilter = true 时只查免费题（权限优先，忽略前端传入的 isVip）；
+     * 返回 QuestionListVO（不含答案字段）。
      */
     @Select("<script>" +
             "SELECT q.id, q.category_id AS categoryId, c.name AS categoryName, q.type, q.difficulty, " +
@@ -33,14 +34,18 @@ public interface QuestionMapper extends BaseMapper<Question> {
             "<if test='categoryIds != null'> AND q.category_id IN " +
             "<foreach item='i' collection='categoryIds' open='(' separator=',' close=')'>#{i}</foreach></if>" +
             "<if test='keyword != null and keyword != \"\"'> AND q.title LIKE CONCAT('%', #{keyword}, '%')</if>" +
+            "<if test='type != null'> AND q.type = #{type}</if>" +
             "<if test='difficulty != null'> AND q.difficulty = #{difficulty}</if>" +
             "<if test='vipFilter'> AND q.is_vip = 0</if>" +
+            "<if test='!vipFilter and isVip != null'> AND q.is_vip = #{isVip}</if>" +
             " ORDER BY q.id DESC" +
             "</script>")
     IPage<QuestionListVO> selectPageList(Page<QuestionListVO> page,
                                          @Param("categoryIds") List<Long> categoryIds,
                                          @Param("keyword") String keyword,
+                                         @Param("type") Integer type,
                                          @Param("difficulty") Integer difficulty,
+                                         @Param("isVip") Integer isVip,
                                          @Param("vipFilter") boolean vipFilter);
 
     /**
@@ -78,6 +83,7 @@ public interface QuestionMapper extends BaseMapper<Question> {
             "<if test='categoryIds != null'> AND q.category_id IN " +
             "<foreach item='i' collection='categoryIds' open='(' separator=',' close=')'>#{i}</foreach></if>" +
             "<if test='keyword != null and keyword != \"\"'> AND q.title LIKE CONCAT('%', #{keyword}, '%')</if>" +
+            "<if test='type != null'> AND q.type = #{type}</if>" +
             "<if test='isVip != null'> AND q.is_vip = #{isVip}</if>" +
             "<if test='difficulty != null'> AND q.difficulty = #{difficulty}</if>" +
             "<if test='status != null'> AND q.status = #{status}</if>" +
@@ -86,6 +92,7 @@ public interface QuestionMapper extends BaseMapper<Question> {
     IPage<QuestionAdminVO> selectAdminPage(Page<QuestionAdminVO> page,
                                            @Param("categoryIds") List<Long> categoryIds,
                                            @Param("keyword") String keyword,
+                                           @Param("type") Integer type,
                                            @Param("isVip") Integer isVip,
                                            @Param("difficulty") Integer difficulty,
                                            @Param("status") Integer status);
@@ -105,11 +112,18 @@ public interface QuestionMapper extends BaseMapper<Question> {
     int changeLikeCount(@Param("id") Long id, @Param("delta") int delta);
 
     /**
-     * 按点赞表重算 like_count 兜底接口用（文档 4.6）
+     * 按点赞表重算 like_count 兜底接口用（文档 4.6）。只重算未删除题目。
      */
     @Update("UPDATE question q SET like_count = " +
-            "(SELECT COUNT(*) FROM question_like l WHERE l.question_id = q.id AND l.deleted = 0)")
+            "(SELECT COUNT(*) FROM question_like l WHERE l.question_id = q.id AND l.deleted = 0) " +
+            "WHERE q.deleted = 0")
     int recalcLikeCount();
+
+    /**
+     * 只取点赞数（供答题前详情使用，避免为拿 likeCount 而全字段查出答案列，文档 4.2 精神）
+     */
+    @Select("SELECT like_count FROM question WHERE id = #{id} AND deleted = 0")
+    Integer selectLikeCount(@Param("id") Long id);
 
     /**
      * 导入查重：按 (category_id, title_md5) 批量查询已存在题目（文档 4.4）

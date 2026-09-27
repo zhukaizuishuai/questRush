@@ -12,7 +12,7 @@ import java.util.Map;
 public interface AdminQuestionService {
 
     IPage<QuestionAdminVO> page(long pageNum, long pageSize, Long categoryId, String keyword,
-                                Integer isVip, Integer difficulty, Integer status);
+                                Integer type, Integer isVip, Integer difficulty, Integer status);
 
     QuestionAdminVO detail(Long id);
 

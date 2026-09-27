@@ -11,6 +11,7 @@ import com.learn.exception.ResultCode;
 import com.learn.mapper.UserMapper;
 import com.learn.mapper.VipOrderMapper;
 import com.learn.service.VipService;
+import com.learn.util.PageUtil;
 import com.learn.vo.VipOrderVO;
 import com.learn.vo.VipPlanVO;
 import jakarta.annotation.Resource;
@@ -19,7 +20,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -80,15 +80,12 @@ public class VipServiceImpl implements VipService {
         if (order == null) {
             throw new BizException(ResultCode.NOT_FOUND, "订单不存在");
         }
-        if (order.getStatus() != 0) {
+        // 原子状态流转：只有把 status 从 0 改成 1 的那一次请求才算「真正支付成功」。
+        // 并发/重复提交时后到的请求会拿到 0 行，直接拒绝，避免权益被重复发放。
+        int affected = vipOrderMapper.markPaid(order.getId());
+        if (affected != 1) {
             throw new BizException(ResultCode.PARAM_ERROR, "订单状态不允许支付");
         }
-        // 订单状态流转
-        VipOrder update = new VipOrder();
-        update.setId(order.getId());
-        update.setStatus(1);
-        update.setPayTime(LocalDateTime.now());
-        vipOrderMapper.updateById(update);
         // 权益发放（事务内）：剩余时长顺延而非覆盖（文档 4.5）
         userMapper.grantVip(userId, order.getMonths());
         log.info("vip granted, userId={}, orderNo={}, months={}", userId, orderNo, order.getMonths());
@@ -96,7 +93,7 @@ public class VipServiceImpl implements VipService {
 
     @Override
     public IPage<VipOrderVO> myOrders(long pageNum, long pageSize, Long userId) {
-        Page<VipOrder> page = new Page<>(pageNum, Math.min(pageSize, 100));
+        Page<VipOrder> page = new Page<>(PageUtil.num(pageNum), PageUtil.size(pageSize));
         IPage<VipOrder> result = vipOrderMapper.selectPage(page, new LambdaQueryWrapper<VipOrder>()
                 .eq(VipOrder::getUserId, userId)
                 .orderByDesc(VipOrder::getId));

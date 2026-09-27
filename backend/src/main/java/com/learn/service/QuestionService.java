@@ -10,9 +10,9 @@ import com.learn.vo.QuestionPracticeVO;
  */
 public interface QuestionService {
 
-    /** 题目列表 / 搜索（同一套 SQL 与权限过滤，文档 4.1） */
+    /** 题目列表 / 搜索（同一套 SQL 与权限过滤，文档 4.1）；type / isVip 为可选筛选 */
     IPage<QuestionListVO> pageList(long pageNum, long pageSize, Long categoryId,
-                                   String keyword, Integer difficulty, Long userId);
+                                   String keyword, Integer type, Integer difficulty, Integer isVip, Long userId);
 
     /** 答题前详情：不含答案字段（文档 4.2），逐条鉴权（文档 4.1） */
     QuestionPracticeVO detail(Long questionId, Long userId);

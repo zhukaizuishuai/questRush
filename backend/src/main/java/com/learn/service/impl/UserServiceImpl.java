@@ -1,6 +1,7 @@
 package com.learn.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.learn.dto.PasswordChangeDTO;
 import com.learn.dto.UserUpdateDTO;
 import com.learn.entity.User;
@@ -62,20 +63,33 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public void update(Long userId, UserUpdateDTO dto) {
-        User update = new User();
-        update.setId(userId);
-        update.setNickname(dto.getNickname());
-        if (dto.getEmail() != null && !dto.getEmail().isBlank()) {
-            // 邮箱唯一校验（排除本人）
-            Long exists = userMapper.selectCount(new LambdaQueryWrapper<User>()
-                    .eq(User::getEmail, dto.getEmail())
-                    .ne(User::getId, userId));
-            if (exists > 0) {
-                throw new BizException(ResultCode.PARAM_ERROR, "该邮箱已被其他账号绑定");
-            }
-            update.setEmail(dto.getEmail());
+        LambdaUpdateWrapper<User> wrapper = new LambdaUpdateWrapper<User>().eq(User::getId, userId);
+        boolean changed = false;
+        if (dto.getNickname() != null) {
+            wrapper.set(User::getNickname, dto.getNickname());
+            changed = true;
         }
-        userMapper.updateById(update);
+        if (dto.getEmail() != null) {
+            String email = dto.getEmail().trim();
+            if (email.isEmpty()) {
+                // 空串 = 解绑邮箱（唯一索引允许多个 NULL，但不允许多个空串，必须写 NULL）
+                wrapper.set(User::getEmail, null);
+            } else {
+                // 邮箱唯一校验（排除本人）
+                Long exists = userMapper.selectCount(new LambdaQueryWrapper<User>()
+                        .eq(User::getEmail, email)
+                        .ne(User::getId, userId));
+                if (exists > 0) {
+                    throw new BizException(ResultCode.PARAM_ERROR, "该邮箱已被其他账号绑定");
+                }
+                wrapper.set(User::getEmail, email);
+            }
+            changed = true;
+        }
+        if (!changed) {
+            return;
+        }
+        userMapper.update(null, wrapper);
     }
 
     @Override
@@ -105,11 +119,13 @@ public class UserServiceImpl implements UserService {
             throw new BizException(ResultCode.PARAM_ERROR, "仅支持 jpg/png/webp 格式");
         }
         try {
-            // 文件名重命名为 UUID（上传安全，文档 4.4）
-            Path dir = Paths.get(uploadDir, "avatar");
+            // 文件名重命名为 UUID（上传安全，文档 4.4）。
+            // 必须用绝对路径：MultipartFile.transferTo(File) 对相对路径会写到 multipart 临时目录，
+            // 而 /uploads/** 映射的是进程工作目录的 ./uploads，导致「上传成功但图片 404」。
+            Path dir = Paths.get(uploadDir, "avatar").toAbsolutePath().normalize();
             Files.createDirectories(dir);
             String filename = UUID.randomUUID().toString().replace("-", "") + "." + ext;
-            file.transferTo(dir.resolve(filename).toFile());
+            file.transferTo(dir.resolve(filename));
             String url = "/uploads/avatar/" + filename;
             User update = new User();
             update.setId(userId);

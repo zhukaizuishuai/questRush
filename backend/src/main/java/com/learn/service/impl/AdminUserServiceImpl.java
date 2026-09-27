@@ -2,6 +2,7 @@ package com.learn.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.learn.dto.AdminUserStatusDTO;
@@ -11,6 +12,7 @@ import com.learn.exception.BizException;
 import com.learn.exception.ResultCode;
 import com.learn.mapper.UserMapper;
 import com.learn.service.AdminUserService;
+import com.learn.util.PageUtil;
 import com.learn.vo.UserVO;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
@@ -26,7 +28,7 @@ public class AdminUserServiceImpl implements AdminUserService {
 
     @Override
     public IPage<UserVO> page(long pageNum, long pageSize, String keyword, Integer status, String role) {
-        Page<User> page = new Page<>(pageNum, Math.min(pageSize, 100));
+        Page<User> page = new Page<>(PageUtil.num(pageNum), PageUtil.size(pageSize));
         LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<User>()
                 .and(keyword != null && !keyword.isBlank(), w -> w
                         .like(User::getUsername, keyword)
@@ -61,11 +63,11 @@ public class AdminUserServiceImpl implements AdminUserService {
         if (userMapper.selectById(dto.getUserId()) == null) {
             throw new BizException(ResultCode.NOT_FOUND, "用户不存在");
         }
-        // 直接覆盖（文档 4.5：管理员手动设置走独立接口）
-        User update = new User();
-        update.setId(dto.getUserId());
-        update.setVipExpireTime(dto.getVipExpireTime());
-        userMapper.updateById(update);
+        // 直接覆盖（文档 4.5）。必须用 UpdateWrapper 显式 set：
+        // MyBatis-Plus 默认非空策略会跳过 null 字段，用 updateById 无法把 vipExpireTime 置空（取消 VIP）。
+        userMapper.update(null, new LambdaUpdateWrapper<User>()
+                .set(User::getVipExpireTime, dto.getVipExpireTime())
+                .eq(User::getId, dto.getUserId()));
     }
 
     @Override

@@ -110,40 +110,58 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public LoginVO login(LoginDTO dto, HttpServletRequest request) {
         String ip = IpUtil.getIp(request);
+        String username = dto.getUsername() == null ? "" : dto.getUsername().trim();
+
         // IP 维度限流：15 分钟内失败 20 次锁 IP 30 分钟（文档 4.7）
         if (cache.exists("login:ip:lock:" + ip)) {
             throw new BizException(ResultCode.PARAM_ERROR, "操作过于频繁，请 30 分钟后再试");
         }
-        User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, dto.getUsername()));
-
-        // 账号锁定检查（账号维度，文档 4.7）
-        if (user != null && user.getLoginLockTime() != null && user.getLoginLockTime().isAfter(LocalDateTime.now())) {
-            throw new BizException(ResultCode.PARAM_ERROR, "账号已锁定，请 15 分钟后再试");
+        // 账号维度限流改为「按用户名」计数：不区分账号是否存在。
+        // 若沿用 DB 的 login_fail_count（只有真实存在的账号才有行），不存在的用户名永远不会触发
+        // requireCaptcha / 锁定，攻击者可据此枚举已注册账号（违反文档 4.7 无账号枚举）。
+        String userFailKey = "login:user:fail:" + username;
+        String userLockKey = "login:user:lock:" + username;
+        if (cache.exists(userLockKey)) {
+            throw new BizException(ResultCode.PARAM_ERROR, "登录失败次数过多，请 15 分钟后再试");
         }
 
-        // 验证码策略（产品调整 2026-09-27）：登录页始终显示验证码，因此「带了就校验」，
-        // 防止验证码沦为摆设；同时保留渐进式语义——同一账号连续失败 >= 3 次即使不传也强制校验（文档 4.7）
-        boolean captchaRequired = user != null
-                && user.getLoginFailCount() != null
-                && user.getLoginFailCount() >= 3;
+        User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
+        // DB 中的锁定状态（管理员改库等场景）；文案与缓存锁定保持一致，避免差异暴露账号是否存在
+        if (user != null && user.getLoginLockTime() != null && user.getLoginLockTime().isAfter(LocalDateTime.now())) {
+            cache.set(userLockKey, 1, Duration.ofMinutes(15));
+            throw new BizException(ResultCode.PARAM_ERROR, "登录失败次数过多，请 15 分钟后再试");
+        }
+
+        // 验证码策略（产品调整 2026-09-27）：登录页始终显示验证码，因此「带了就校验」；
+        // 渐进式语义：同一用户名连续失败 >= 3 次起，即使不传也强制校验（文档 4.7）
+        boolean captchaRequired = readFailCount(userFailKey) >= 3;
         boolean captchaProvided = dto.getCaptchaId() != null && !dto.getCaptchaId().isBlank()
                 && dto.getCaptchaCode() != null && !dto.getCaptchaCode().isBlank();
-        if (captchaRequired || captchaProvided) {
+        if (captchaRequired && !captchaProvided) {
+            // 与密码错误文案完全一致，仅附加 requireCaptcha 供前端展示输入框
+            throw new BizException(ResultCode.PARAM_ERROR, "用户名或密码错误", Map.of("requireCaptcha", true));
+        }
+        if (captchaProvided) {
             verifyGraphCaptcha(dto.getCaptchaId(), dto.getCaptchaCode());
         }
 
         // 密码校验：无论账号不存在还是密码错误，提示完全一致，防账号枚举（文档 4.7）
-        if (user == null || !encoder.matches(dto.getPassword(), user.getPassword())) {
+        boolean passwordOk = user != null && encoder.matches(dto.getPassword(), user.getPassword());
+        if (!passwordOk) {
             if (user != null) {
                 userMapper.recordLoginFail(user.getId());
             }
+            int userFails = readFailCount(userFailKey) + 1;
+            cache.set(userFailKey, userFails, Duration.ofMinutes(15));
             long ipFails = cache.increment("login:ip:fail:" + ip, Duration.ofMinutes(15));
             if (ipFails >= 20) {
                 cache.set("login:ip:lock:" + ip, 1, Duration.ofMinutes(30));
             }
-            if (captchaRequired || (user != null && user.getLoginFailCount() + 1 >= 3)) {
-                throw new BizException(ResultCode.PARAM_ERROR, "用户名或密码错误",
-                        Map.of("requireCaptcha", true));
+            if (userFails >= 5) {
+                cache.set(userLockKey, 1, Duration.ofMinutes(15));
+            }
+            if (userFails >= 3) {
+                throw new BizException(ResultCode.PARAM_ERROR, "用户名或密码错误", Map.of("requireCaptcha", true));
             }
             throw new BizException(ResultCode.PARAM_ERROR, "用户名或密码错误");
         }
@@ -155,11 +173,18 @@ public class AuthServiceImpl implements AuthService {
 
         // 登录成功：重置失败计数并签发 Token
         userMapper.resetLoginFail(user.getId());
+        cache.delete(userFailKey);
         StpUtil.login(user.getId());
         LoginVO vo = new LoginVO();
         vo.setToken(StpUtil.getTokenValue());
         vo.setUser(toUserVO(user));
         return vo;
+    }
+
+    /** 读取用户名维度的失败计数（CacheService 的计数器不落在 store 上，这里用 get/set 维护） */
+    private int readFailCount(String key) {
+        Object v = cache.get(key);
+        return v instanceof Number n ? n.intValue() : 0;
     }
 
     @Override

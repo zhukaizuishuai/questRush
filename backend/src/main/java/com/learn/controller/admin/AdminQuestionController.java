@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.learn.common.PageResult;
 import com.learn.common.Result;
 import com.learn.dto.QuestionSaveDTO;
+import com.learn.dto.QuestionStatusDTO;
 import com.learn.service.AdminQuestionService;
 import com.learn.service.QuestionExcelService;
 import com.learn.vo.ImportResultVO;
@@ -39,17 +40,18 @@ public class AdminQuestionController {
 
     // ---------- 题目 CRUD ----------
 
-    /** 题目分页（QuestionAdminVO 全字段，仅 admin） */
+    /** 题目分页（QuestionAdminVO 全字段，仅 admin）；支持 type/isVip/difficulty/status/keyword 筛选 */
     @GetMapping("/question/list")
     public Result<PageResult<QuestionAdminVO>> list(@RequestParam(defaultValue = "1") long pageNum,
                                                     @RequestParam(defaultValue = "10") long pageSize,
                                                     @RequestParam(required = false) Long categoryId,
                                                     @RequestParam(required = false) String keyword,
+                                                    @RequestParam(required = false) Integer type,
                                                     @RequestParam(required = false) Integer isVip,
                                                     @RequestParam(required = false) Integer difficulty,
                                                     @RequestParam(required = false) Integer status) {
         IPage<QuestionAdminVO> page = adminQuestionService.page(pageNum, pageSize, categoryId, keyword,
-                isVip, difficulty, status);
+                type, isVip, difficulty, status);
         return Result.ok(PageResult.of(page, page.getRecords()));
     }
 
@@ -73,10 +75,10 @@ public class AdminQuestionController {
         return Result.ok();
     }
 
-    /** 上下架 */
+    /** 上下架（JSON body {id, status}） */
     @PutMapping("/question/status")
-    public Result<Void> updateStatus(@RequestParam Long id, @RequestParam Integer status) {
-        adminQuestionService.updateStatus(id, status);
+    public Result<Void> updateStatus(@Valid @RequestBody QuestionStatusDTO dto) {
+        adminQuestionService.updateStatus(dto.getId(), dto.getStatus());
         return Result.ok();
     }
 

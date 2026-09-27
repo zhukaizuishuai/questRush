@@ -3,7 +3,6 @@ package com.learn.service.impl;
 import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.context.AnalysisContext;
 import com.alibaba.excel.event.AnalysisEventListener;
-import com.alibaba.excel.exception.ExcelAnalysisStopException;
 import com.alibaba.excel.write.metadata.WriteSheet;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -142,7 +141,7 @@ public class QuestionExcelServiceImpl implements QuestionExcelService {
         private final String strategy;
         private final ImportResultVO result;
         private final List<RowWrapper> buffer = new ArrayList<>();
-        private boolean stopped = false;
+        private boolean overflowReported = false;
 
         BatchListener(String strategy, ImportResultVO result) {
             this.strategy = strategy;
@@ -151,15 +150,16 @@ public class QuestionExcelServiceImpl implements QuestionExcelService {
 
         @Override
         public void invoke(QuestionExcelDTO dto, AnalysisContext context) {
-            if (stopped) {
-                return;
-            }
             // Excel 人类行号（含表头）
             int row = context.readRowHolder().getRowIndex() + 1;
             if (row > MAX_ROWS + 1) {
-                // 超过 5000 行：优雅停止读取（文档 4.4 限制）
-                stopped = true;
-                throw new ExcelAnalysisStopException();
+                // 超过 5000 行：不再入库，但明确回传失败明细（文档 4.4 限制），避免静默丢行
+                if (!overflowReported) {
+                    overflowReported = true;
+                    result.getFailures().add(new ImportResultVO.FailureItem(row,
+                            "超出单次导入上限 " + MAX_ROWS + " 行，本行及之后的行未处理"));
+                }
+                return;
             }
             buffer.add(new RowWrapper(row, dto));
             if (buffer.size() >= BATCH_SIZE) {
@@ -168,7 +168,7 @@ public class QuestionExcelServiceImpl implements QuestionExcelService {
         }
 
         void flushTail() {
-            if (!stopped && !buffer.isEmpty()) {
+            if (!buffer.isEmpty()) {
                 flush();
             }
         }
@@ -217,11 +217,17 @@ public class QuestionExcelServiceImpl implements QuestionExcelService {
                 }
                 final Integer finalType = type;
                 QuestionCategory category = categoryCache.computeIfAbsent(trim(dto.getCategoryName()), name -> {
-                    QuestionCategory c = categoryMapper.selectOne(new LambdaQueryWrapper<QuestionCategory>()
+                    // 分类名无唯一约束，重名时 selectOne 会抛 TooManyResultsException 并伪装成「行数据解析失败」，
+                    // 这里改用 selectList 并给出明确的重名提示。
+                    List<QuestionCategory> matched = categoryMapper.selectList(new LambdaQueryWrapper<QuestionCategory>()
                             .eq(QuestionCategory::getName, name));
-                    if (c == null) {
+                    if (matched.isEmpty()) {
                         throw new IllegalArgumentException("分类不存在：" + name);
                     }
+                    if (matched.size() > 1) {
+                        throw new IllegalArgumentException("分类名称重复，无法唯一定位：" + name + "，请先重命名");
+                    }
+                    QuestionCategory c = matched.get(0);
                     if (c.getParentId() == null || c.getParentId() == 0) {
                         throw new IllegalArgumentException("分类必须为二级（叶子）分类：" + name);
                     }
@@ -308,13 +314,14 @@ public class QuestionExcelServiceImpl implements QuestionExcelService {
             result.setSuccessCount(successBefore + written);
         } catch (Exception e) {
             log.warn("excel batch persist failed, rollback rows {}", batchRows, e);
-            // 整批回滚：该批行号范围记入失败（文档 4.4）
+            // 整批回滚：先清掉本批事务内已写入的残留计数/明细（例如 ERROR 策略的「题目重复」），
+            // 再把该批全部行号记为失败（文档 4.4）。顺序不能颠倒，否则刚补的失败行会被一起清掉。
+            result.getFailures().subList(failuresBefore, result.getFailures().size()).clear();
             for (Integer row : batchRows) {
                 result.getFailures().add(new ImportResultVO.FailureItem(row, "入库失败，本批次已整体回滚"));
             }
             result.setSuccessCount(successBefore);
             result.setSkippedCount(skippedBefore);
-            result.getFailures().subList(failuresBefore, result.getFailures().size()).clear();
         }
         result.setFailCount(result.getFailures().size());
     }
@@ -345,7 +352,7 @@ public class QuestionExcelServiceImpl implements QuestionExcelService {
                 while (true) {
                     Page<QuestionAdminVO> page = new Page<>(pageNum, 1000);
                     IPage<QuestionAdminVO> data = questionMapper.selectAdminPage(page,
-                            categoryId == null ? null : List.of(categoryId), null, isVip, difficulty, status);
+                            categoryId == null ? null : List.of(categoryId), null, null, isVip, difficulty, status);
                     if (data.getRecords().isEmpty()) {
                         break;
                     }

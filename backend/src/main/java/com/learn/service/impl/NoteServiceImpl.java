@@ -13,9 +13,14 @@ import com.learn.mapper.QuestionMapper;
 import com.learn.mapper.UserMapper;
 import com.learn.mapper.UserNoteMapper;
 import com.learn.service.NoteService;
+import com.learn.util.PageUtil;
 import com.learn.vo.NoteVO;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 笔记服务实现（文档 3.8 / 4.1）。
@@ -61,19 +66,21 @@ public class NoteServiceImpl implements NoteService {
 
     @Override
     public IPage<NoteVO> list(long pageNum, long pageSize, Long userId) {
-        Page<NoteVO> page = new Page<>(pageNum, Math.min(pageSize, 100));
+        Page<NoteVO> page = new Page<>(PageUtil.num(pageNum), PageUtil.size(pageSize));
         IPage<NoteVO> result = noteMapper.selectNotePage(page, userId);
-        // 越权条目脱敏（文档 4.1）：VIP 题在无权限时题干置空，只保留 id 与内容不可见
+        // 越权条目脱敏（文档 4.1）：VIP 题在无权限时题干置空，只保留 id
         User user = userMapper.selectById(userId);
         boolean admin = user != null && "admin".equals(user.getRole());
-        if (!admin) {
-            boolean vipValid = checker.isVipValid(user);
-            for (NoteVO vo : result.getRecords()) {
-                if (vo.getQuestionTitle() != null) {
-                    Question q = questionMapper.selectById(vo.getQuestionId());
-                    if (q != null && q.getIsVip() == 1 && !vipValid) {
-                        vo.setQuestionTitle(null);
-                    }
+        List<NoteVO> records = result.getRecords();
+        if (!admin && records != null && !records.isEmpty() && !checker.isVipValid(user)) {
+            // 批量取题目，避免逐条 selectById 的 N+1；用 equals 比较 Integer 防拆箱 NPE
+            List<Long> questionIds = records.stream().map(NoteVO::getQuestionId).distinct().toList();
+            Map<Long, Question> questionMap = questionMapper.selectBatchIds(questionIds).stream()
+                    .collect(Collectors.toMap(Question::getId, q -> q));
+            for (NoteVO vo : records) {
+                Question q = questionMap.get(vo.getQuestionId());
+                if (q != null && Integer.valueOf(1).equals(q.getIsVip())) {
+                    vo.setQuestionTitle(null);
                 }
             }
         }

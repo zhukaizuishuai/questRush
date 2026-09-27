@@ -70,15 +70,17 @@ public class QuestionBatchWriter {
         q.setAnswer(vr.answer());
         q.setAnalysis(vr.analysis());
         q.setIsVip(vr.isVip());
-        q.setStatus(1);
         q.setTitleMd5(vr.titleMd5());
         if (old != null) {
+            // OVERWRITE 不改上下架状态：文档 4.4 只授权更新题干/选项/答案/解析，
+            // 若强制 setStatus(1) 会把管理员特意下架的题目意外重新上架。
             questionMapper.updateById(q);
             // 更新选项：旧选项全部逻辑删除再插入（选项 id 变化不影响历史作答记录，文档 4.4 要点 3）
             optionMapper.delete(new LambdaQueryWrapper<QuestionOption>()
                     .eq(QuestionOption::getQuestionId, old.getId()));
             insertOptions(old.getId(), vr.options());
         } else {
+            q.setStatus(1);
             questionMapper.insert(q);
             insertOptions(q.getId(), vr.options());
         }

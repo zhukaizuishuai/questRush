@@ -17,12 +17,14 @@ import com.learn.mapper.UserFavoriteMapper;
 import com.learn.mapper.UserQuestionRecordMapper;
 import com.learn.service.PracticeService;
 import com.learn.util.CacheService;
+import com.learn.util.PageUtil;
 import com.learn.vo.QuestionPracticeVO;
 import com.learn.vo.QuestionSubmitVO;
 import com.learn.vo.QuestionWrongVO;
 import com.learn.vo.StatsVO;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDate;
@@ -46,6 +48,12 @@ import java.util.UUID;
 public class PracticeServiceImpl implements PracticeService {
 
     private static final String SESSION_KEY_PREFIX = "practice:session:";
+
+    /**
+     * 刷题会话缓存值：绑定 userId，避免会话 id 被他人复用；显式类型避免缓存实现替换后的 ClassCastException。
+     */
+    private record PracticeSession(Long userId, List<Long> ids) {
+    }
 
     @Resource
     private QuestionMapper questionMapper;
@@ -85,19 +93,21 @@ public class PracticeServiceImpl implements PracticeService {
             ids = new ArrayList<>(ids.subList(0, count));
         }
         String sessionId = UUID.randomUUID().toString().replace("-", "");
-        // TTL 2 小时（文档 4.3）
-        cache.set(SESSION_KEY_PREFIX + sessionId, ids, Duration.ofHours(2));
+        // TTL 2 小时（文档 4.3）；会话绑定用户，防止会话 id 外泄后被他人复用
+        cache.set(SESSION_KEY_PREFIX + sessionId, new PracticeSession(userId, ids), Duration.ofHours(2));
         return Map.of("sessionId", sessionId, "total", ids.size());
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public QuestionPracticeVO next(String sessionId, int index, Long userId) {
         Object cached = cache.get(SESSION_KEY_PREFIX + sessionId);
-        if (cached == null) {
+        if (!(cached instanceof PracticeSession session)) {
             throw new BizException(ResultCode.PARAM_ERROR, "会话已过期，请重新开始练习");
         }
-        List<Long> ids = (List<Long>) cached;
+        if (!userId.equals(session.userId())) {
+            throw new BizException(ResultCode.FORBIDDEN, "无权访问该刷题会话");
+        }
+        List<Long> ids = session.ids();
         if (index < 0 || index >= ids.size()) {
             throw new BizException(ResultCode.NOT_FOUND, "题目序号超出会话范围");
         }
@@ -106,6 +116,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public QuestionSubmitVO submit(SubmitDTO dto, Long userId) {
         // 防普通用户对 VIP 题作答（文档 4.1 鉴权矩阵）；不通过则不落库
         Question question = checker.checkReadable(dto.getQuestionId(), userId);
@@ -174,7 +185,7 @@ public class PracticeServiceImpl implements PracticeService {
 
     @Override
     public IPage<QuestionWrongVO> wrongBook(long pageNum, long pageSize, Long userId) {
-        Page<QuestionWrongVO> page = new Page<>(pageNum, Math.min(pageSize, 100));
+        Page<QuestionWrongVO> page = new Page<>(PageUtil.num(pageNum), PageUtil.size(pageSize));
         IPage<QuestionWrongVO> result = recordMapper.selectWrongBook(page, userId);
         maskUnauthorized(result.getRecords(), userId);
         return result;
@@ -182,7 +193,7 @@ public class PracticeServiceImpl implements PracticeService {
 
     @Override
     public IPage<QuestionWrongVO> reviewList(long pageNum, long pageSize, Long userId) {
-        Page<QuestionWrongVO> page = new Page<>(pageNum, Math.min(pageSize, 100));
+        Page<QuestionWrongVO> page = new Page<>(PageUtil.num(pageNum), PageUtil.size(pageSize));
         IPage<QuestionWrongVO> result = recordMapper.selectReviewQueue(page, userId);
         maskUnauthorized(result.getRecords(), userId);
         return result;

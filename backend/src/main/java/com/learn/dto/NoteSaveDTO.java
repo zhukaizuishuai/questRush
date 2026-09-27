@@ -15,6 +15,6 @@ public class NoteSaveDTO {
     private Long questionId;
 
     @NotBlank(message = "笔记内容不能为空")
-    @Size(max = 65535, message = "笔记内容过长")
+    @Size(max = 20000, message = "笔记内容过长（最多 20000 字）")
     private String content;
 }

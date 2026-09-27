@@ -23,20 +23,23 @@ public interface UserQuestionRecordMapper extends BaseMapper<UserQuestionRecord>
      * 答对分支：review_level 与 next_review_time 在 SQL 内基于旧值推导，保证并发原子性。
      */
     @Insert("INSERT INTO user_question_record " +
-            "(user_id, question_id, last_answer, is_correct, total_count, wrong_count, continuous_correct, review_level, next_review_time, mastered, submit_time) " +
-            "VALUES (#{userId}, #{questionId}, #{answer}, 1, 1, 0, 1, 1, DATE_ADD(NOW(), INTERVAL 1 DAY), 0, NOW()) " +
+            "(user_id, question_id, last_answer, is_correct, total_count, wrong_count, continuous_correct, review_level, next_review_time, mastered, deleted, submit_time) " +
+            "VALUES (#{userId}, #{questionId}, #{answer}, 1, 1, 0, 1, 1, DATE_ADD(NOW(), INTERVAL 1 DAY), 0, 0, NOW()) " +
             "ON DUPLICATE KEY UPDATE " +
-            "last_answer = VALUES(last_answer), is_correct = 1, total_count = total_count + 1, " +
-            "continuous_correct = continuous_correct + 1, " +
-            "review_level = LEAST(review_level + 1, 5), " +
-            "mastered = IF(continuous_correct + 1 >= 3 OR LEAST(review_level + 1, 5) >= 5, 1, 0), " +
-            "next_review_time = IF(continuous_correct + 1 >= 3 OR LEAST(review_level + 1, 5) >= 5, NULL, " +
+            "last_answer = VALUES(last_answer), is_correct = 1, total_count = total_count + 1, deleted = 0, " +
+            // 关键：MySQL 的 ON DUPLICATE KEY UPDATE 赋值从左到右求值，后写的表达式读到的是前面刚赋值后的新值。
+            // 因此 mastered / next_review_time 这两个派生字段必须写在 continuous_correct、review_level 自增之前，
+            // 否则会变成「旧值 + 2」判断：连对第 2 次就 mastered、答错后首次答对给 2 天而非 1 天。
+            "mastered = IF(continuous_correct + 1 >= 3 OR review_level + 1 >= 5, 1, 0), " +
+            "next_review_time = IF(continuous_correct + 1 >= 3 OR review_level + 1 >= 5, NULL, " +
             "  CASE LEAST(review_level + 1, 5) " +
             "    WHEN 1 THEN DATE_ADD(NOW(), INTERVAL 1 DAY) " +
             "    WHEN 2 THEN DATE_ADD(NOW(), INTERVAL 2 DAY) " +
             "    WHEN 3 THEN DATE_ADD(NOW(), INTERVAL 4 DAY) " +
             "    WHEN 4 THEN DATE_ADD(NOW(), INTERVAL 7 DAY) " +
             "    ELSE DATE_ADD(NOW(), INTERVAL 15 DAY) END), " +
+            "continuous_correct = continuous_correct + 1, " +
+            "review_level = LEAST(review_level + 1, 5), " +
             "submit_time = NOW()")
     int upsertCorrect(@Param("userId") Long userId, @Param("questionId") Long questionId, @Param("answer") String answer);
 
@@ -47,7 +50,7 @@ public interface UserQuestionRecordMapper extends BaseMapper<UserQuestionRecord>
             "(user_id, question_id, last_answer, is_correct, total_count, wrong_count, continuous_correct, review_level, next_review_time, mastered, submit_time) " +
             "VALUES (#{userId}, #{questionId}, #{answer}, 0, 1, 1, 0, 0, DATE_ADD(NOW(), INTERVAL 1 DAY), 0, NOW()) " +
             "ON DUPLICATE KEY UPDATE " +
-            "last_answer = VALUES(last_answer), is_correct = 0, total_count = total_count + 1, " +
+            "last_answer = VALUES(last_answer), is_correct = 0, total_count = total_count + 1, deleted = 0, " +
             "wrong_count = wrong_count + 1, continuous_correct = 0, review_level = 0, " +
             "mastered = 0, next_review_time = DATE_ADD(NOW(), INTERVAL 1 DAY), submit_time = NOW()")
     int upsertWrong(@Param("userId") Long userId, @Param("questionId") Long questionId, @Param("answer") String answer);
@@ -59,7 +62,7 @@ public interface UserQuestionRecordMapper extends BaseMapper<UserQuestionRecord>
             "(user_id, question_id, last_answer, is_correct, total_count, wrong_count, continuous_correct, review_level, next_review_time, mastered, submit_time) " +
             "VALUES (#{userId}, #{questionId}, #{answer}, NULL, 1, 0, 0, 0, NULL, 0, NOW()) " +
             "ON DUPLICATE KEY UPDATE " +
-            "last_answer = VALUES(last_answer), is_correct = NULL, total_count = total_count + 1, submit_time = NOW()")
+            "last_answer = VALUES(last_answer), is_correct = NULL, total_count = total_count + 1, deleted = 0, submit_time = NOW()")
     int upsertEssay(@Param("userId") Long userId, @Param("questionId") Long questionId, @Param("answer") String answer);
 
     /**

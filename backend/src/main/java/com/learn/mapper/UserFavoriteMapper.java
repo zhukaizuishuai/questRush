@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.learn.entity.UserFavorite;
 import com.learn.vo.FavoriteItemVO;
+import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -21,6 +22,14 @@ public interface UserFavoriteMapper extends BaseMapper<UserFavorite> {
     /** 查含已软删在内的行（toggle 依赖） */
     @Select("SELECT * FROM user_favorite WHERE user_id = #{userId} AND question_id = #{questionId}")
     UserFavorite selectAnyRow(@Param("userId") Long userId, @Param("questionId") Long questionId);
+
+    /**
+     * 原子 toggle：行不存在则插入 deleted=0（收藏）；已存在则就地翻转 deleted。
+     * 由唯一键 uk_user_question 保证单行，并发首次收藏不会撞键（对比先 SELECT 后 INSERT 的竞态）。
+     */
+    @Insert("INSERT INTO user_favorite (user_id, question_id, deleted) VALUES (#{userId}, #{questionId}, 0) " +
+            "ON DUPLICATE KEY UPDATE deleted = IF(deleted = 0, 1, 0)")
+    int upsertToggle(@Param("userId") Long userId, @Param("questionId") Long questionId);
 
     /** 翻转 deleted（文档 3.0：toggle 语义，永不新增行——行已存在时） */
     @Update("UPDATE user_favorite SET deleted = #{deleted} WHERE id = #{id}")

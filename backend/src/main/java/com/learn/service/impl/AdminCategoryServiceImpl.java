@@ -36,6 +36,11 @@ public class AdminCategoryServiceImpl implements AdminCategoryService {
             if (parent == null) {
                 throw new BizException(ResultCode.PARAM_ERROR, "父分类不存在");
             }
+            // 只允许两级：父分类必须是一级分类（文档 3.2 题目只挂叶子）
+            if (parent.getParentId() != null && parent.getParentId() != 0) {
+                throw new BizException(ResultCode.PARAM_ERROR, "最多支持两级分类，不能在子分类下再建子分类");
+            }
+            assertParentHasNoQuestions(parentId);
         }
         QuestionCategory category = new QuestionCategory();
         category.setName(dto.getName());
@@ -54,6 +59,9 @@ public class AdminCategoryServiceImpl implements AdminCategoryService {
             throw new BizException(ResultCode.NOT_FOUND, "分类不存在");
         }
         Long parentId = dto.getParentId() == null ? exists.getParentId() : dto.getParentId();
+        if (parentId == null) {
+            parentId = 0L;
+        }
         if (parentId.equals(dto.getId())) {
             throw new BizException(ResultCode.PARAM_ERROR, "父分类不能是自己");
         }
@@ -61,6 +69,17 @@ public class AdminCategoryServiceImpl implements AdminCategoryService {
             QuestionCategory parent = categoryMapper.selectById(parentId);
             if (parent == null) {
                 throw new BizException(ResultCode.PARAM_ERROR, "父分类不存在");
+            }
+            if (parent.getParentId() != null && parent.getParentId() != 0) {
+                throw new BizException(ResultCode.PARAM_ERROR, "最多支持两级分类，不能在子分类下再建子分类");
+            }
+            // 目标父分类若已挂题目，不能再被当作父级（否则题目会变成非叶子）
+            assertParentHasNoQuestions(parentId);
+            // 自身若已有子分类，也不能再降级为别人的子分类（否则出现三级）
+            Long childCount = categoryMapper.selectCount(new LambdaQueryWrapper<QuestionCategory>()
+                    .eq(QuestionCategory::getParentId, dto.getId()));
+            if (childCount > 0) {
+                throw new BizException(ResultCode.PARAM_ERROR, "该分类下已有子分类，不能再作为子分类");
             }
         }
         QuestionCategory update = new QuestionCategory();
@@ -71,6 +90,15 @@ public class AdminCategoryServiceImpl implements AdminCategoryService {
             update.setSort(dto.getSort());
         }
         categoryMapper.updateById(update);
+    }
+
+    /** 作为父分类前必须自身没有题目，否则其下题目会变成「非叶子分类下的题目」 */
+    private void assertParentHasNoQuestions(Long parentId) {
+        Long count = questionMapper.selectCount(new LambdaQueryWrapper<Question>()
+                .eq(Question::getCategoryId, parentId));
+        if (count > 0) {
+            throw new BizException(ResultCode.PARAM_ERROR, "该分类下已有题目，不能再建子分类");
+        }
     }
 
     @Override

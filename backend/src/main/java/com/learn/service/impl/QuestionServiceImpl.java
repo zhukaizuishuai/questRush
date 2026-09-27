@@ -17,6 +17,7 @@ import com.learn.mapper.QuestionOptionMapper;
 import com.learn.mapper.UserFavoriteMapper;
 import com.learn.service.QuestionService;
 import com.learn.util.MarkdownUtil;
+import com.learn.util.PageUtil;
 import com.learn.vo.QuestionAnswerVO;
 import com.learn.vo.QuestionListVO;
 import com.learn.vo.QuestionOptionVO;
@@ -56,12 +57,13 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     public IPage<QuestionListVO> pageList(long pageNum, long pageSize, Long categoryId,
-                                          String keyword, Integer difficulty, Long userId) {
+                                          String keyword, Integer type, Integer difficulty, Integer isVip, Long userId) {
         List<Long> categoryIds = resolveCategoryIds(categoryId);
-        // 非管理员且 VIP 无效 → SQL 层只查免费题（文档 4.1）
+        // 非管理员且 VIP 无效 → SQL 层只查免费题（文档 4.1，权限优先于前端筛选）
         boolean vipFilter = !checker.canReadVip(userId);
-        Page<QuestionListVO> page = new Page<>(pageNum, Math.min(pageSize, 100));
-        IPage<QuestionListVO> result = questionMapper.selectPageList(page, categoryIds, keyword, difficulty, vipFilter);
+        Page<QuestionListVO> page = new Page<>(PageUtil.num(pageNum), PageUtil.size(pageSize));
+        IPage<QuestionListVO> result = questionMapper.selectPageList(page, categoryIds, keyword, type, difficulty,
+                isVip, vipFilter);
         // 列表题干输出纯文本摘要（文档 4.2）
         result.getRecords().forEach(vo -> vo.setTitle(MarkdownUtil.summary(vo.getTitle(), 120)));
         return result;
@@ -85,8 +87,9 @@ public class QuestionServiceImpl implements QuestionService {
         vo.setLiked(likeMapper.selectCount(new LambdaQueryWrapper<QuestionLike>()
                 .eq(QuestionLike::getUserId, userId)
                 .eq(QuestionLike::getQuestionId, questionId)) > 0);
-        Question full = questionMapper.selectById(questionId);
-        vo.setLikeCount(full == null || full.getLikeCount() == null ? 0 : full.getLikeCount());
+        // 只查 like_count 一列，不为拿计数把 answer/answer_text/analysis 读进内存（文档 4.2）
+        Integer likeCount = questionMapper.selectLikeCount(questionId);
+        vo.setLikeCount(likeCount == null ? 0 : likeCount);
         return vo;
     }
 

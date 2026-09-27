@@ -16,6 +16,7 @@ import com.learn.mapper.UserAnswerLogMapper;
 import com.learn.mapper.UserMapper;
 import com.learn.service.AdminQuestionService;
 import com.learn.util.Md5Util;
+import com.learn.util.PageUtil;
 import com.learn.vo.QuestionAdminVO;
 import com.learn.vo.QuestionOptionVO;
 import jakarta.annotation.Resource;
@@ -51,10 +52,11 @@ public class AdminQuestionServiceImpl implements AdminQuestionService {
 
     @Override
     public IPage<QuestionAdminVO> page(long pageNum, long pageSize, Long categoryId, String keyword,
-                                       Integer isVip, Integer difficulty, Integer status) {
+                                       Integer type, Integer isVip, Integer difficulty, Integer status) {
         List<Long> categoryIds = categoryId == null ? null : List.of(categoryId);
-        Page<QuestionAdminVO> page = new Page<>(pageNum, Math.min(pageSize, 100));
-        IPage<QuestionAdminVO> result = questionMapper.selectAdminPage(page, categoryIds, keyword, isVip, difficulty, status);
+        Page<QuestionAdminVO> page = new Page<>(PageUtil.num(pageNum), PageUtil.size(pageSize));
+        IPage<QuestionAdminVO> result = questionMapper.selectAdminPage(page, categoryIds, keyword, type, isVip,
+                difficulty, status);
         fillOptions(result.getRecords());
         return result;
     }
@@ -74,7 +76,7 @@ public class AdminQuestionServiceImpl implements AdminQuestionService {
     public void save(QuestionSaveDTO dto) {
         validate(dto);
         Question question = new Question();
-        applyDto(question, dto);
+        applyDto(question, dto, true);
         questionMapper.insert(question);
         saveOptions(question.getId(), dto);
     }
@@ -88,7 +90,7 @@ public class AdminQuestionServiceImpl implements AdminQuestionService {
         validate(dto);
         Question question = new Question();
         question.setId(dto.getId());
-        applyDto(question, dto);
+        applyDto(question, dto, false);
         questionMapper.updateById(question);
         // OVERWRITE 语义：旧选项全部逻辑删除再插入新选项（文档 4.4）
         optionMapper.delete(new LambdaQueryWrapper<QuestionOption>()
@@ -161,20 +163,34 @@ public class AdminQuestionServiceImpl implements AdminQuestionService {
                 }
             }
         } else if (dto.getAnswerText() == null || dto.getAnswerText().isBlank()) {
-            // 简答题建议提供参考答案（不强制，留宽松）
-            dto.setAnswerText(dto.getAnswerText());
+            // 简答题参考答案不强制（宽松处理），无需额外动作
         }
     }
 
-    private void applyDto(Question question, QuestionSaveDTO dto) {
+    /**
+     * DTO → 实体。
+     * isInsert = true：status / isVip 缺省时给默认值（1 / 0）；
+     * isInsert = false：仅在显式传值时覆盖，避免「只改题干却把已下架题目改回启用」。
+     * answerText / analysis 编辑时显式传空串，保证可清空（MP 默认非空策略会跳过 null）。
+     */
+    private void applyDto(Question question, QuestionSaveDTO dto, boolean isInsert) {
         question.setCategoryId(dto.getCategoryId());
         question.setType(dto.getType());
         question.setDifficulty(dto.getDifficulty() == null ? 2 : dto.getDifficulty());
         question.setTitle(dto.getTitle());
-        question.setAnswerText(dto.getAnswerText());
-        question.setAnalysis(dto.getAnalysis());
-        question.setIsVip(dto.getIsVip() == null ? 0 : dto.getIsVip());
-        question.setStatus(dto.getStatus() == null ? 1 : dto.getStatus());
+        question.setAnswerText(dto.getAnswerText() == null ? (isInsert ? null : "") : dto.getAnswerText());
+        question.setAnalysis(dto.getAnalysis() == null ? (isInsert ? null : "") : dto.getAnalysis());
+        if (isInsert) {
+            question.setIsVip(dto.getIsVip() == null ? 0 : dto.getIsVip());
+            question.setStatus(dto.getStatus() == null ? 1 : dto.getStatus());
+        } else {
+            if (dto.getIsVip() != null) {
+                question.setIsVip(dto.getIsVip());
+            }
+            if (dto.getStatus() != null) {
+                question.setStatus(dto.getStatus());
+            }
+        }
         if (dto.getType() != 4) {
             // 多选答案入库前归一化：按字符排序拼接（文档 4.3）
             question.setAnswer(normalizeAnswer(dto.getAnswer(), dto.getType()));

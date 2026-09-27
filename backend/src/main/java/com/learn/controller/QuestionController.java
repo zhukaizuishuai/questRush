@@ -24,14 +24,16 @@ public class QuestionController {
     @Resource
     private QuestionService questionService;
 
-    /** 题目列表（QuestionListVO，按权限过滤，文档 4.1） */
+    /** 题目列表（QuestionListVO，按权限过滤，文档 4.1）；支持 categoryId/type/difficulty/isVip 筛选 */
     @GetMapping("/list")
     public Result<PageResult<QuestionListVO>> list(@RequestParam(defaultValue = "1") long pageNum,
                                                    @RequestParam(defaultValue = "10") long pageSize,
                                                    @RequestParam(required = false) Long categoryId,
-                                                   @RequestParam(required = false) Integer difficulty) {
-        IPage<QuestionListVO> page = questionService.pageList(pageNum, pageSize, categoryId, null, difficulty,
-                StpUtil.getLoginIdAsLong());
+                                                   @RequestParam(required = false) Integer type,
+                                                   @RequestParam(required = false) Integer difficulty,
+                                                   @RequestParam(required = false) Integer isVip) {
+        IPage<QuestionListVO> page = questionService.pageList(pageNum, pageSize, categoryId, null, type, difficulty,
+                isVip, StpUtil.getLoginIdAsLong());
         return Result.ok(PageResult.of(page, page.getRecords()));
     }
 
@@ -41,9 +43,11 @@ public class QuestionController {
                                                      @RequestParam(defaultValue = "10") long pageSize,
                                                      @RequestParam(required = false) Long categoryId,
                                                      @RequestParam(required = false) String keyword,
-                                                     @RequestParam(required = false) Integer difficulty) {
-        IPage<QuestionListVO> page = questionService.pageList(pageNum, pageSize, categoryId, keyword, difficulty,
-                StpUtil.getLoginIdAsLong());
+                                                     @RequestParam(required = false) Integer type,
+                                                     @RequestParam(required = false) Integer difficulty,
+                                                     @RequestParam(required = false) Integer isVip) {
+        IPage<QuestionListVO> page = questionService.pageList(pageNum, pageSize, categoryId, keyword, type, difficulty,
+                isVip, StpUtil.getLoginIdAsLong());
         return Result.ok(PageResult.of(page, page.getRecords()));
     }
 
