@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { toggleLike } from '@/api/like'
 import { useUserStore } from '@/stores/user'
@@ -21,6 +21,16 @@ const localLiked = ref(props.liked ?? false)
 const localCount = ref(props.likeCount ?? 0)
 /** 请求进行中置灰，防连点 */
 const pending = ref(false)
+
+// props 是异步到达的（详情页先挂载组件再拉到数据），必须同步，
+// 否则按钮初始态恒为「未点赞 / 0」，与真实数据不符。
+watch(
+  () => [props.liked, props.likeCount] as const,
+  ([liked, count]) => {
+    localLiked.value = liked ?? false
+    localCount.value = count ?? 0
+  }
+)
 
 async function onClick() {
   if (!userStore.isLoggedIn) {

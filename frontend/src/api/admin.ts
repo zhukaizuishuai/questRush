@@ -10,18 +10,18 @@ import type {
 
 // ============ 用户管理 ============
 
-export function userList(params: { username?: string; pageNum?: number; pageSize?: number }) {
+export function userList(params: { keyword?: string; pageNum?: number; pageSize?: number }) {
   return get<PageResult<AdminUserVO>>('/admin/user/list', params)
 }
 
-/** 禁用 / 启用（后端会强制登出） */
+/** 禁用 / 启用（后端会强制登出）；字段名与后端 DTO 对齐（userId） */
 export function updateUserStatus(id: number, status: number) {
-  return put<null>('/admin/user/status', { id, status })
+  return put<null>('/admin/user/status', { userId: id, status })
 }
 
-/** 手动设置 VIP 过期时间 */
+/** 手动设置 VIP 过期时间（传 null 取消 VIP） */
 export function setUserVip(id: number, vipExpireTime: string | null) {
-  return put<null>('/admin/user/vip', { id, vipExpireTime })
+  return put<null>('/admin/user/vip', { userId: id, vipExpireTime })
 }
 
 // ============ 分类管理 ============
@@ -38,9 +38,9 @@ export function updateCategory(data: { id: number; name: string; parentId: numbe
   return put<null>('/admin/category', data)
 }
 
-/** 删除分类（后端校验子分类与启用题目） */
+/** 删除分类（后端校验子分类与启用题目）；后端为 @DeleteMapping("/{id}")，必须走路径变量 */
 export function deleteCategory(id: number) {
-  return del<null>('/admin/category', { id })
+  return del<null>('/admin/category/' + id)
 }
 
 // ============ 题目管理 ============
@@ -86,11 +86,12 @@ export function updateQuestion(data: QuestionSaveDTO) {
   return put<null>('/admin/question', data)
 }
 
+/** 删除题目（逻辑删除）；后端为 @DeleteMapping("/question/{id}")，必须走路径变量 */
 export function deleteQuestion(id: number) {
-  return del<null>('/admin/question', { id })
+  return del<null>('/admin/question/' + id)
 }
 
-/** 上下架 */
+/** 上下架（后端已改为 @RequestBody {id,status}） */
 export function updateQuestionStatus(id: number, status: number) {
   return put<null>('/admin/question/status', { id, status })
 }

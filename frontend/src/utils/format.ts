@@ -54,3 +54,18 @@ export function formatDate(time?: string | null): string {
 export function captchaImageSrc(image: string): string {
   return image.startsWith('data:') ? image : `data:image/png;base64,${image}`
 }
+
+/**
+ * 时间戳 → 后端 LocalDateTime 可解析的本地时间串 yyyy-MM-ddTHH:mm:ss。
+ * 注意不要用 Date#toISOString()（带 Z 的 UTC 串），后端字段是 LocalDateTime，反序列化会 422。
+ */
+export function toLocalDateTimeString(time: number | string | null | undefined): string | null {
+  if (time === null || time === undefined || time === '') return null
+  const d = new Date(time)
+  if (Number.isNaN(d.getTime())) return null
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  )
+}

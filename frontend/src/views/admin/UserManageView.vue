@@ -12,7 +12,7 @@ import {
   type DataTableColumns
 } from 'naive-ui'
 import { setUserVip, updateUserStatus, userList } from '@/api/admin'
-import { formatDate, formatTime } from '@/utils/format'
+import { formatDate, formatTime, toLocalDateTimeString } from '@/utils/format'
 import type { AdminUserVO } from '@/types'
 
 const message = useMessage()
@@ -21,7 +21,7 @@ const dialog = useDialog()
 const loading = ref(false)
 const list = ref<AdminUserVO[]>([])
 const total = ref(0)
-const query = reactive({ username: '', pageNum: 1, pageSize: 10 })
+const query = reactive({ keyword: '', pageNum: 1, pageSize: 10 })
 
 // VIP 设置弹窗
 const showVipModal = ref(false)
@@ -32,7 +32,7 @@ async function load() {
   loading.value = true
   try {
     const page = await userList({
-      username: query.username || undefined,
+      keyword: query.keyword || undefined,
       pageNum: query.pageNum,
       pageSize: query.pageSize
     })
@@ -75,9 +75,10 @@ function openVipModal(row: AdminUserVO) {
 
 async function saveVip() {
   if (!vipUser.value) return
-  const timeStr = vipExpire.value ? new Date(vipExpire.value).toISOString() : null
+  // 后端字段是 LocalDateTime，必须发本地时间串（不能用 toISOString() 的 UTC+Z）
+  const timeStr = toLocalDateTimeString(vipExpire.value)
   await setUserVip(vipUser.value.id, timeStr)
-  message.success('VIP 过期时间已更新')
+  message.success(vipExpire.value ? 'VIP 过期时间已更新' : '已取消 VIP')
   showVipModal.value = false
   await load()
 }
@@ -138,8 +139,8 @@ const columns: DataTableColumns<AdminUserVO> = [
     <h2 class="page-title">用户管理</h2>
     <div class="toolbar">
       <n-input
-        v-model:value="query.username"
-        placeholder="按用户名搜索"
+        v-model:value="query.keyword"
+        placeholder="按用户名 / 昵称搜索"
         clearable
         style="width: 220px"
         @keyup.enter="onSearch"

@@ -42,13 +42,13 @@ export function logout() {
   return post<null>('/auth/logout')
 }
 
-/** 发送邮箱验证码（找回密码 / 绑定邮箱） */
-export function sendEmailCode(email: string) {
-  return post<null>('/auth/email-code', { email })
+/** 发送邮箱验证码（找回密码 / 绑定邮箱）——后端强制图形验证码，必须带上 captchaId+captchaCode */
+export function sendEmailCode(data: { email: string; captchaId: string; captchaCode: string }) {
+  return post<null>('/auth/email-code', data)
 }
 
-/** 邮箱验证码重置密码 */
-export function resetPassword(data: { email: string; emailCode: string; newPassword: string }) {
+/** 邮箱验证码重置密码（字段名 mailCode 与后端 ResetPasswordDTO 对齐） */
+export function resetPassword(data: { email: string; mailCode: string; newPassword: string }) {
   return post<null>('/auth/reset-password', data)
 }
 

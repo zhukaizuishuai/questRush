@@ -29,7 +29,8 @@ onMounted(() => {
 async function saveProfile() {
   profileSaving.value = true
   try {
-    await updateUser({ nickname: profileForm.nickname, email: profileForm.email || undefined })
+    // 邮箱传空串表示解绑（后端会写 NULL）；传 undefined 会被后端当作「不修改」
+    await updateUser({ nickname: profileForm.nickname, email: profileForm.email ?? '' })
     await userStore.fetchUserInfo()
     message.success('个人信息已更新')
   } finally {
@@ -131,7 +132,7 @@ function beforeUpload({ file }: { file: UploadFileInfo }) {
               <n-input v-model:value="profileForm.nickname" placeholder="昵称" />
             </n-form-item>
             <n-form-item label="邮箱">
-              <n-input v-model:value="profileForm.email" placeholder="邮箱（用于找回密码）" />
+              <n-input v-model:value="profileForm.email" placeholder="邮箱（用于找回密码，留空则解绑）" />
             </n-form-item>
             <n-form-item label=" ">
               <n-button type="primary" :loading="profileSaving" @click="saveProfile">保存修改</n-button>

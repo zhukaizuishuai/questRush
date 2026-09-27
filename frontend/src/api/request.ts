@@ -13,11 +13,12 @@ const instance: AxiosInstance = axios.create({
   timeout: 15000
 })
 
-// 请求拦截：注入 sa-token（header 名 Authorization）
+// 请求拦截：注入 sa-token。header 名必须与后端 sa-token.token-name 一致（本项目为 satoken），
+// 否则跨域/禁用 Cookie 时后端读不到 token（同源下靠登录时写入的 Cookie 兜底，属隐式依赖）。
 instance.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_KEY)
   if (token) {
-    config.headers['Authorization'] = token
+    config.headers['satoken'] = token
   }
   return config
 })
@@ -26,6 +27,17 @@ function clearAuthAndGoLogin() {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(USER_KEY)
   message.error('登录已失效，请重新登录')
+  // 同步清空 Pinia：store 的 token 是创建时的快照，只清 localStorage 会导致
+  // isLoggedIn 仍为 true，跳转 /login 时被守卫弹回首页，形成 401 死循环。
+  import('@/stores/user')
+    .then(({ useUserStore }) => {
+      const store = useUserStore()
+      store.token = ''
+      store.userInfo = null
+    })
+    .catch(() => {
+      /* pinia 未就绪时忽略 */
+    })
   // 动态引入避免循环依赖
   import('@/router').then(({ default: router }) => {
     const current = router.currentRoute.value
@@ -40,20 +52,21 @@ let vipDialogShowing = false
 function showVipDialog() {
   if (vipDialogShowing) return
   vipDialogShowing = true
+  const close = () => {
+    vipDialogShowing = false
+  }
   dialog.warning({
     title: '需要开通会员',
     content: '该题目为 VIP 专属题目，开通会员即可解锁全部题库与解析。',
     positiveText: '立即开通',
     negativeText: '暂不需要',
     onPositiveClick: () => {
+      // 点「立即开通」不触发 onClose，必须在此复位，否则标志位永久为 true，后续 40301 不再提示
+      close()
       import('@/router').then(({ default: router }) => router.push('/vip'))
     },
-    onClose: () => {
-      vipDialogShowing = false
-    },
-    onNegativeClick: () => {
-      vipDialogShowing = false
-    }
+    onClose: close,
+    onNegativeClick: close
   })
 }
 

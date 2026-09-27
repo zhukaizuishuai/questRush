@@ -3,9 +3,9 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { NSpin } from 'naive-ui'
 import { getCategoryTree } from '@/api/category'
-import { reviewList, stats } from '@/api/practice'
+import { stats } from '@/api/practice'
 import { useUserStore } from '@/stores/user'
-import type { CategoryVO, PracticeStatsVO, WrongBookVO } from '@/types'
+import type { CategoryVO, PracticeStatsVO } from '@/types'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -13,7 +13,6 @@ const userStore = useUserStore()
 const loading = ref(true)
 const categories = ref<CategoryVO[]>([])
 const statsData = ref<PracticeStatsVO | null>(null)
-const reviewItems = ref<WrongBookVO[]>([])
 
 /** 分类图标：浅色底 + 品牌化彩色图标底 */
 const colorPalette = [
@@ -30,17 +29,17 @@ onMounted(async () => {
     const tree = await getCategoryTree()
     categories.value = tree ?? []
     if (userStore.isLoggedIn) {
-      const [s, r] = await Promise.all([
-        stats().catch(() => null),
-        reviewList().catch(() => null)
-      ])
-      statsData.value = s
-      reviewItems.value = r?.list ?? []
+      // 待复习数量直接用统计接口的 reviewCount（服务端同口径），
+      // 不能用复习队列列表当前页长度，否则超过一页会显示封顶值。
+      statsData.value = await stats().catch(() => null)
     }
   } finally {
     loading.value = false
   }
 })
+
+/** 今日待复习数量 */
+const reviewCount = computed(() => statsData.value?.reviewCount ?? 0)
 
 const categoryColor = (id: number) => colorPalette[Math.abs(id) % colorPalette.length]
 
@@ -114,8 +113,8 @@ function goCategory(c: CategoryVO) {
           <div class="stat-label">连续打卡</div>
         </div>
         <div class="stat-card gold" @click="router.push('/review')">
-          <div class="stat-num stat-value">{{ reviewItems.length }}</div>
-          <div class="stat-label">{{ reviewItems.length > 0 ? '今日待复习 · 点击进入' : '今日无待复习' }}</div>
+          <div class="stat-num stat-value">{{ reviewCount }}</div>
+          <div class="stat-label">{{ reviewCount > 0 ? '今日待复习 · 点击进入' : '今日无待复习' }}</div>
         </div>
       </section>
 

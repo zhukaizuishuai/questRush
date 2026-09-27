@@ -26,6 +26,8 @@ const message = useMessage()
 
 const loading = ref(true)
 const question = ref<QuestionPracticeVO | null>(null)
+/** 40301：VIP 题无权限，与「题目不存在」区分文案 */
+const forbidden = ref(false)
 
 // 笔记弹窗
 const showNoteModal = ref(false)
@@ -62,10 +64,16 @@ async function toggleAnswer() {
 
 async function load() {
   loading.value = true
+  forbidden.value = false
   try {
     const id = Number(route.params.id)
     question.value = await questionDetail(id)
     favorited.value = question.value?.favorited ?? false
+  } catch (e) {
+    // 40301 = 需开通会员；与真正的「题目不存在」区分展示，避免误导
+    const code = (e as { result?: { code?: number } })?.result?.code
+    forbidden.value = code === 40301
+    question.value = null
   } finally {
     loading.value = false
   }
@@ -170,6 +178,10 @@ function goPractice() {
           <n-button secondary @click="openNote">📝 笔记</n-button>
           <LikeButton :question-id="question.id" :liked="question.liked" :like-count="question.likeCount" />
         </div>
+      </div>
+      <div v-else-if="!loading && forbidden" class="empty-tip">
+        <p>该题目为 VIP 专属，开通会员后可查看题干与解析。</p>
+        <n-button type="primary" @click="router.push('/vip')">去开通会员</n-button>
       </div>
       <div v-else-if="!loading" class="empty-tip">题目不存在或已下架</div>
     </n-spin>

@@ -37,14 +37,15 @@ function toggle(code: string) {
 </script>
 
 <template>
-  <!-- 简答题：文本作答 -->
+  <!-- 简答题：文本作答（后端 SubmitDTO @Size(max=500) 与列 VARCHAR(500) 一致，前端同步限制） -->
   <textarea
     v-if="type === 4"
     class="short-answer"
     :value="modelValue"
     :disabled="disabled"
+    maxlength="500"
     rows="6"
-    placeholder="请输入你的作答内容（简答题不自动判分，提交后可查看参考答案）"
+    placeholder="请输入你的作答内容（最多 500 字；简答题不自动判分，提交后可查看参考答案）"
     @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
   ></textarea>
 

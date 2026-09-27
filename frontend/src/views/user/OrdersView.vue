@@ -2,8 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton, NEmpty, NSpin, NTag } from 'naive-ui'
-import { payMock } from '@/api/vip'
-import { myOrders } from '@/api/vip'
+import { myOrders, payMock } from '@/api/vip'
 import { useMessage } from 'naive-ui'
 import { formatTime } from '@/utils/format'
 import type { VipOrderVO } from '@/types'
@@ -24,7 +23,9 @@ const PLAN_MAP: Record<string, string> = { month: '月卡', quarter: '季卡', y
 async function load() {
   loading.value = true
   try {
-    list.value = (await myOrders()) ?? []
+    // 后端返回 PageResult，需取 list（此前直接当数组用，导致订单页恒为「暂无订单」）
+    const page = await myOrders({ pageNum: 1, pageSize: 50 })
+    list.value = page.list ?? []
   } finally {
     loading.value = false
   }

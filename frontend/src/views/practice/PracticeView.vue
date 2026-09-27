@@ -191,7 +191,8 @@ function resultClass() {
             <div v-if="result.answer" class="result-line">
               正确答案：<b class="answer-text">{{ result.answer }}</b>
             </div>
-            <div v-if="result.mastered != null" class="result-line mastery">
+            <!-- 仅客观题展示掌握状态：简答题不入复习队列（isCorrect 为 null），显示会误导 -->
+            <div v-if="result.isCorrect != null" class="result-line mastery">
               {{ result.mastered === 1 ? '🎯 本题已掌握，移出复习队列' : '📌 已加入复习队列，按遗忘曲线安排复习' }}
               <template v-if="result.nextReviewTime">（下次复习：{{ result.nextReviewTime }}）</template>
             </div>
