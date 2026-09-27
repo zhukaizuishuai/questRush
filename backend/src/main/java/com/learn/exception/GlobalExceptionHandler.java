@@ -46,6 +46,18 @@ public class GlobalExceptionHandler {
         return Result.fail(ResultCode.PARAM_ERROR.getCode(), msg);
     }
 
+    /** 缺少必填请求参数（?xxx= 没传）→ 422 而非 500 */
+    @ExceptionHandler(org.springframework.web.bind.MissingServletRequestParameterException.class)
+    public Result<Object> handleMissingParam(org.springframework.web.bind.MissingServletRequestParameterException e) {
+        return Result.fail(ResultCode.PARAM_ERROR.getCode(), "缺少参数：" + e.getParameterName());
+    }
+
+    /** 参数类型错误（如 ?id=abc）→ 422 而非 500 */
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public Result<Object> handleTypeMismatch(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException e) {
+        return Result.fail(ResultCode.PARAM_ERROR.getCode(), "参数格式错误：" + e.getName());
+    }
+
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public Result<Object> handleUnreadable(HttpMessageNotReadableException e) {
         return Result.fail(ResultCode.PARAM_ERROR.getCode(), "请求体格式错误");

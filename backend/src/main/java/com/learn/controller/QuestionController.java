@@ -46,9 +46,9 @@ public class QuestionController {
         return Result.ok(PageResult.of(page, page.getRecords()));
     }
 
-    /** 答题前详情（QuestionPracticeVO，不含答案，文档 4.2） */
+    /** 答题前详情（QuestionPracticeVO，不含答案，文档 4.2）。前端传 ?id= */
     @GetMapping("/detail")
-    public Result<QuestionPracticeVO> detail(@RequestParam Long questionId) {
+    public Result<QuestionPracticeVO> detail(@RequestParam("id") Long questionId) {
         return Result.ok(questionService.detail(questionId, StpUtil.getLoginIdAsLong()));
     }
 }
