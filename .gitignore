@@ -42,6 +42,9 @@ Thumbs.db
 # ===== WorkBuddy 工作区数据（记忆/本地配置，不入库） =====
 .workbuddy/
 
+# ===== 本地联调指南（含本机密码，禁止上传） =====
+/LOCAL_SETUP.md
+
 # ===== 本地配置（避免覆盖他人配置） =====
 *.local
 vite.config.*.timestamp-*
