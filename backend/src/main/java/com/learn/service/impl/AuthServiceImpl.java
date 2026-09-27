@@ -121,11 +121,14 @@ public class AuthServiceImpl implements AuthService {
             throw new BizException(ResultCode.PARAM_ERROR, "账号已锁定，请 15 分钟后再试");
         }
 
-        // 渐进式验证码：同一账号连续失败 >= 3 次后要求图形验证码（文档 4.7）
+        // 验证码策略（产品调整 2026-09-27）：登录页始终显示验证码，因此「带了就校验」，
+        // 防止验证码沦为摆设；同时保留渐进式语义——同一账号连续失败 >= 3 次即使不传也强制校验（文档 4.7）
         boolean captchaRequired = user != null
                 && user.getLoginFailCount() != null
                 && user.getLoginFailCount() >= 3;
-        if (captchaRequired) {
+        boolean captchaProvided = dto.getCaptchaId() != null && !dto.getCaptchaId().isBlank()
+                && dto.getCaptchaCode() != null && !dto.getCaptchaCode().isBlank();
+        if (captchaRequired || captchaProvided) {
             verifyGraphCaptcha(dto.getCaptchaId(), dto.getCaptchaCode());
         }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NButton, NForm, NFormItem, NInput, useMessage } from 'naive-ui'
 import { useUserStore } from '@/stores/user'
@@ -19,9 +19,11 @@ const form = reactive({
 })
 
 const loading = ref(false)
-/** 登录失败 ≥3 次后端返回 requireCaptcha 时动态显示验证码输入框 */
-const showCaptcha = ref(false)
+/** 登录页始终显示验证码（产品调整 2026-09-27），后端「带了就校验」 */
+const showCaptcha = ref(true)
 const captcha = ref<CaptchaVO | null>(null)
+
+onMounted(refreshCaptcha)
 
 async function refreshCaptcha() {
   captcha.value = await getCaptcha()
@@ -43,19 +45,9 @@ async function onSubmit() {
     const redirect = (route.query.redirect as string) || '/'
     router.push(redirect)
   } catch (e) {
-    // 渐进式验证码：失败 ≥3 次后端返回 requireCaptcha，动态显示验证码
-    const result = (e as { result?: { code?: number; data?: { requireCaptcha?: boolean } } }).result
-    if (result?.data?.requireCaptcha && !showCaptcha.value) {
-      showCaptcha.value = true
-      await refreshCaptcha()
-      message.warning('登录失败次数过多，请输入图形验证码')
-    } else {
-      // 提交失败后自动刷新验证码，避免拿已失效的图反复提交
-      if (showCaptcha.value) {
-        form.captchaCode = ''
-        await refreshCaptcha()
-      }
-    }
+    // 提交失败后自动刷新验证码，避免拿已失效的图反复提交
+    form.captchaCode = ''
+    await refreshCaptcha()
   } finally {
     loading.value = false
   }
