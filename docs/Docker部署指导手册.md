@@ -19,44 +19,50 @@
 | **数据卷 (volume)** | 容器删了数据还在的"外挂硬盘" | localStorage / 数据库文件落在容器外 |
 | **端口映射** | 把容器端口映射到宿主机 | Vite 的 `server.proxy` 反向思路：外部 → 容器 |
 
+名称记法：这一章的词**都不是缩写，就是英文原词**——`docker` 本义"码头搬运工"（把应用连同环境打包搬着走），`image` 图像/镜像、`container` 容器、`volume` 体积/卷、`compose` 组合/编排、`network` 网络。`Dockerfile` = Docker + file（构建说明书）。
+
 **最重要的一条心智模型**：容器之间互相隔离，`localhost` 各是各的。容器 A 想访问容器 B，不能用 `localhost`，要用 **compose 里的服务名**（比如 `http://backend:8080`）——这是裸机迁移到 Docker 时最容易翻车的点。
 
 ## 第二章 Docker 常用命令速查
 
+> Linux 基础命令（`ssh` `scp` `ls` `cp` `tar` `ps` `ss` `kill` `systemctl` `grep` 等）的英文全称已在《部署指导手册.md》第一章逐条标注，本文档只补 Docker 相关的部分。
+
 ### 2.1 镜像与容器基础
 
 ```bash
-docker ps                      # 看正在运行的容器（加 -a 连停止的也看）
-docker images                  # 本地有哪些镜像
-docker pull nginx:1.27-alpine  # 下载镜像（tag 决定版本，alpine=精简版）
-docker run -d --name xx nginx  # 从镜像启动容器（-d 后台）
-docker stop xx / start xx      # 停止 / 启动已有容器
-docker rm xx                   # 删除容器（先 stop）
-docker rmi 镜像名              # 删除镜像
-docker logs -f xx              # 跟踪容器日志（等价 tail -f）
-docker exec -it xx bash        # 进入容器内部开个终端（像 ssh 进小电脑）
-docker inspect xx              # 查看容器全部细节（IP、挂载、环境变量）
+docker ps                      # ps = Process Status（进程状态）：看正在运行的容器（加 -a = all，连停止的也看）
+docker images                  # images = 镜像复数：本地有哪些镜像
+docker pull nginx:1.27-alpine  # pull = 拉取：下载镜像（tag 决定版本，alpine 是最小的精简版发行版）
+docker run -d --name xx nginx  # run = 运行：从镜像启动容器（-d = detach 脱离终端跑后台，--name 指定容器名）
+docker stop xx / start xx      # stop 停止 / start 启动已有容器
+docker rm xx                   # rm = ReMove（移除）：删除容器（先 stop）
+docker rmi 镜像名              # rmi = Remove Image（删镜像），比 rm 多个 i
+docker logs -f xx              # logs = 日志：跟踪容器日志（-f = follow 跟随，等价 tail -f）
+docker exec -it xx bash        # exec = EXECute（执行）：进容器内部开个终端（像 ssh 进小电脑）
+                               # -i = interactive 交互模式，-t = tty 分配伪终端，两个常合写成 -it
+docker inspect xx              # inspect = 检视：查看容器全部细节（IP、挂载、环境变量）
 ```
 
 ### 2.2 docker compose（本项目主用）
 
 ```bash
-docker compose up -d           # 按 yaml 一键启动全套（-d 后台）
+docker compose up -d           # up = 起（与 down 相对）：按 yaml 一键启动全套（-d = detach 后台）
 docker compose ps              # 看这套服务的状态
 docker compose logs -f backend # 只跟某个服务的日志
 docker compose restart backend # 重启某个服务
-docker compose down            # 全部停止并删除容器（数据卷默认保留）
-docker compose up -d --force-recreate backend   # 配置改了想重建容器
+docker compose down            # down = 拆掉：全部停止并删除容器（数据卷默认保留）
+docker compose up -d --force-recreate backend   # recreate = 重建：配置改了想让容器按新配置重来
 ```
 
-对比裸机：裸机更新要「kill 旧进程 → nohup 拉新进程」手动两步；Docker 是「换文件 → `docker compose restart`」一步，且服务器重启后所有容器自动恢复（`restart: always`），不再需要 nohup。
+对比裸机：裸机更新要「kill 旧进程 → nohup 拉新进程」手动两步；Docker 是「换文件 → `docker compose restart`」一步，且服务器重启后所有容器自动恢复（`restart: always`），不再需要 nohup（NO Hang-UP，不挂断）。
 
 ### 2.3 数据卷与拷贝
 
 ```bash
-docker volume ls                          # 列出数据卷
+docker volume ls                          # volume = 卷；ls = LiSt 列出数据卷
 docker volume inspect compose名_mysql-data # 查看卷实际存在宿主机哪里
-docker cp 容器:/app/a.log ./               # 容器和宿主机之间拷文件
+docker cp 容器名:/app/a.log ./             # cp = CoPy：容器和宿主机之间拷文件
+                                          # 写法同裸机 cp，只是来源写成 "容器名:容器内路径"
 ```
 
 ---
@@ -129,6 +135,9 @@ npm run build                    # 产物 dist/
 ```
 
 ### 阶段 2：服务器建目录 + 上传 `[本机]`
+
+> 命令全称见《部署指导手册》第一章：`ssh` = **S**ecure **Sh**ell、`scp` = **S**ecure **C**opy、`mkdir` = **M**ake **DIR**ectory（`-p` 父目录一并创建）、`tar czf` = **T**ape **AR**chive + **c**reate/**z**ip/**f**ile。
+> `mkdir -p /opt/questrush-docker/{backend,frontend,nginx,mysql/init}` 里的花括号是 shell 的**批量展开**，一条命令建出 4 个目录。
 
 ```bash
 ssh root@<服务器IP> "mkdir -p /opt/questrush-docker/{backend,frontend,nginx,mysql/init}"
@@ -214,6 +223,14 @@ networks:
   questrush:
 ```
 
+> yaml 里各字段与缩写的英文来源：
+> - `container_name` 容器名 / `restart: always` 重启策略（总是自动拉起）/ `environment` 环境变量 / `volumes` 挂载 / `depends_on` 依赖（先起 mysql 再起 backend）/ `networks` 网络 / `ports` 端口，全部是英文原词。
+> - 挂载写法 `宿主机路径:容器路径:ro`，末尾 **`ro` = Read Only（只读）**，容器改不了宿主机上的这个文件。
+> - `${DB_PASSWORD}` 表示"从同目录 `.env` 取值"，`.env` = **env**ironment（环境变量文件）。
+> - `TZ: Asia/Shanghai` 里 **TZ = Time Zone（时区）**，不设的话容器按 UTC 走，日志时间会差 8 小时。
+> - `mysql/init` 对应容器里的 `/docker-entrypoint-initdb.d`：**entrypoint** = 入口点、**init** = **init**ialize（初始化）、末尾 `d` 是 daemon（守护进程）惯例——只有数据卷首次初始化时才会执行这里的 SQL。
+> - `eclipse-temurin:17-jre` 里 **JRE = Java Runtime Environment**（只负责"跑"的运行时），比 **JDK = Java Development Kit**（能编译的开发套件）小一半，容器里只跑 jar 用 JRE 就够。
+
 > `application.yml` 里本来就支持 `DB_HOST`/`DB_PORT` 环境变量，所以后端代码**一行不用改**。
 
 **② `.env`**（与 compose 同目录，存放密码）：
@@ -246,21 +263,25 @@ server {
 }
 ```
 
+> Nginx 指令也都是英文原词：`listen 80` 监听 80 端口；`server_name _` 站点域名（`_` 表示任意域名都匹配）；`root` 站点根目录、`index` 首页文件；`proxy_pass` 把请求"转交"给后端（这就是反向代理）；`proxy_set_header` 转发时补上请求头，`Host` 是原始域名、`X-Real-IP` 是真实客户端 IP；`try_files` 依次尝试这几个路径，都找不到就回 `/index.html`（前端 history 路由刷新不 404 靠它）。
+
 ### 阶段 4：数据迁移（把宿主机 MySQL 的数据搬进容器）`[服务器]`
 
 裸机 MySQL 里已经有你的数据（admin 账号、题目、做题记录），导出后交给容器 MySQL 首次启动自动导入：
 
 ```bash
 # 从宿主机 MySQL 导出（会要 root 密码）
+# mysqldump = mysql + dump（倒出来）；-u = user 账号，-p = password 密码；--databases 指定要导的库
 mysqldump -uroot -p --databases quest_rush \
   > /opt/questrush-docker/mysql/init/01-dump.sql
 
-ls -lh /opt/questrush-docker/mysql/init/
+ls -lh /opt/questrush-docker/mysql/init/   # ls = LiSt 列出；-l 详细信息，-h 人类可读大小
 # 应看到 01-dump.sql（几十 KB 到几 MB）
 
 # 关键约束：mysql 容器只在数据卷【首次初始化】时执行 init 目录里的 SQL。
 # 所以如果之前试跑过 compose（数据卷已存在），必须先清掉重来：
-docker volume ls | grep mysql-data    # 有则先 down + 删卷（见排障表）
+docker volume ls | grep mysql-data    # grep = Global Regular Expression Print，从列表里筛关键字
+                                      # 有输出则先 down + 删卷（见排障表）
 ```
 
 ### 阶段 5：切换 —— 停裸机服务，启动容器 `[服务器]`
@@ -268,16 +289,17 @@ docker volume ls | grep mysql-data    # 有则先 down + 删卷（见排障表�
 宿主机的 nginx（占 80）和后端 java 进程必须先让路：
 
 ```bash
-# 1. 停裸机 nginx
+# 1. 停裸机 nginx（systemctl = SYSTEM CONTrol，系统服务控制）
 systemctl stop nginx
 
 # 2. 停裸机后端（2G 内存也装不下两份 java）
-ps aux | grep java          # 找到 PID
-kill <PID>
-ss -tlnp | grep -E ':(80|8080)\b'   # 确认都释放了
+ps aux | grep java          # ps = Process Status；输出第二列就是 PID（Process ID，进程号）
+kill <PID>                  # kill 本质是给进程发信号，默认 SIGTERM（终止）
+ss -tlnp | grep -E ':(80|8080)\b'   # ss = Socket Statistics 套接字统计；-E = Extended regex（扩展正则）
+                                    # 无输出 = 两个端口都释放了
 
 # 3. 启动全套容器
-cd /opt/questrush-docker
+cd /opt/questrush-docker    # cd = Change Directory
 docker compose up -d
 docker compose ps           # 三个容器都应是 Up / running
 ```
@@ -285,10 +307,11 @@ docker compose ps           # 三个容器都应是 Up / running
 首次启动 mysql 容器会初始化并自动导入 dump.sql，**等待约 30 秒**，然后验证：
 
 ```bash
-docker compose logs backend | tail -20      # 看到 Started LearnApplication
+docker compose logs backend | tail -20      # tail = 尾巴，只看最后 20 行；看到 Started LearnApplication 即成功
 docker exec questrush-mysql mysql -uquest_rush -p'<DB密码>' \
-  -e "USE quest_rush; SHOW TABLES;"         # 表都在 = 数据迁移成功
-curl -I http://127.0.0.1                    # HTTP/1.1 200 OK
+  -e "USE quest_rush; SHOW TABLES;"         # -e = execute，在终端层直接跑一条 SQL（不进 mysql> 交互层）
+                                            # 表都在 = 数据迁移成功
+curl -I http://127.0.0.1                    # curl = Client for URLs；-I 只要响应头；127.0.0.1 = 本机回环地址
 ```
 
 最后浏览器打开 `http://<服务器IP>` → admin 登录 → 刷题正常 = 切换完成。
@@ -297,13 +320,15 @@ curl -I http://127.0.0.1                    # HTTP/1.1 200 OK
 
 ```bash
 # 裸机 MySQL 已无用途（数据已在容器卷里），停掉并取消自启，省 500MB 内存：
+# mysqld 末尾 d = daemon（守护进程，真正在后台跑的那个 MySQL 服务）
+# stop = 只停这一次；disable = 取消开机自启（永久），两个要一起做才彻底
 systemctl stop mysqld
 systemctl disable mysqld
 
 # JDK 也可以留着（宿主机不再需要跑 java）：
 systemctl disable docker 不建议 —— Docker 现在是核心了，必须开机自启
 
-# 防火墙不用动：还是只开放 22 和 80，容器 MySQL 连宿主机端口都不占
+# 防火墙不用动：还是只开放 22（SSH 默认端口）和 80（HTTP 默认端口），容器 MySQL 连宿主机端口都不占
 ```
 
 > 裸机 MySQL 的数据在 `/var/lib/mysql`，建议保留 1~2 周作为回滚保险，确认容器版稳定后再删。
@@ -338,7 +363,7 @@ tar xzf /tmp/dist.tar.gz -C /opt/questrush-docker/frontend --strip-components=1
 ### 数据备份（定期做！）
 
 ```bash
-# [服务器] 一行导出全库快照
+# [服务器] 一行导出全库快照；$(...) 是命令替换，date +%Y%m%d 生成 20261004 这样的日期串
 docker exec questrush-mysql mysqldump -uroot -p'<MYSQL_ROOT_PASSWORD>' quest_rush \
   > /opt/backup/quest_rush_$(date +%Y%m%d).sql
 ```
@@ -346,9 +371,9 @@ docker exec questrush-mysql mysqldump -uroot -p'<MYSQL_ROOT_PASSWORD>' quest_rus
 ### 排障三板斧
 
 ```bash
-docker compose ps                    # 1. 容器是不是都在跑
-docker compose logs --tail 100 backend   # 2. 谁不正常看谁的日志
-docker compose restart <服务名>       # 3. 大部分小毛病重启就好
+docker compose ps                        # 1. 容器是不是都在跑
+docker compose logs --tail 100 backend   # 2. 谁不正常看谁的日志（--tail 100 = 只看最后 100 行）
+docker compose restart <服务名>           # 3. 大部分小毛病重启就好
 ```
 
 ---
@@ -376,9 +401,9 @@ docker compose restart <服务名>       # 3. 大部分小毛病重启就好
 
 ```bash
 docker compose down                      # 停容器（数据卷保留，数据不丢）
-systemctl enable --now nginx mysqld      # 拉起裸机 nginx 和 MySQL（数据还在 /var/lib/mysql）
-su - admin && cd /opt/questrush
-nohup java -jar app.jar > app.log 2>&1 & # 按裸机手册阶段 5
+systemctl enable --now nginx mysqld      # enable = 设开机自启，--now = 立刻就启动；裸机数据还在 /var/lib/mysql
+su - admin && cd /opt/questrush          # su = Switch User 切用户；&& 表示前一条成功才执行后一条
+nohup java -jar app.jar > app.log 2>&1 & # nohup = NO Hang-UP（不挂断），& 丢后台；见裸机手册阶段 5
 ```
 
 **再切回 Docker**：反向操作一遍（停裸机 → `docker compose up -d`），因为 mysql-data 卷一直保留，数据无缝衔接。
@@ -413,6 +438,20 @@ FROM nginx:1.27-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY ../nginx/questrush.conf /etc/nginx/conf.d/default.conf
 ```
+
+Dockerfile 指令全称（全是大写英文原词，不是缩写）：
+
+| 指令 | 英文直译 | 作用 |
+| --- | --- | --- |
+| `FROM` | from（"从……来"） | 声明基础镜像，一切从它起步 |
+| `WORKDIR` | **WORK** **DIR**ectory（工作目录） | 之后的命令都在这个目录里执行 |
+| `COPY` | copy（复制） | 把宿主机文件拷进镜像 |
+| `RUN` | run（运行） | **构建镜像时**执行，结果固化进镜像层（区别于容器启动时才跑的 `ENTRYPOINT`） |
+| `EXPOSE` | expose（暴露） | 声明容器监听哪个端口，主要给使用者看的说明 |
+| `ENTRYPOINT` | **ENTRY POINT**（入口点） | 容器启动时固定执行的命令 |
+| `AS build` | as（"起别名叫 build"） | 给多阶段构建的这一阶段命名，后面才能用 `--from=build` 引用它 |
+| `npm ci` | **C**ontinuous **I**ntegration（持续集成） | 严格按 `package-lock.json` 安装，构建环境比 `npm install` 更稳定 |
+| `--build` | build（构建） | `docker compose up -d --build` = 启动前先本地构建镜像 |
 
 对应地，compose 里 `image: eclipse-temurin:17-jre` + 挂载改为：
 
