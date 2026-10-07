@@ -2,6 +2,11 @@ import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios'
 import { createDiscreteApi } from 'naive-ui'
 import type { Result } from '@/types'
 
+/** silent：调用方自己处理失败提示。401 仍然登出，不随这个开关关掉。 */
+export interface AppRequestConfig extends AxiosRequestConfig {
+  silent?: boolean
+}
+
 /** token 本地存储 key */
 export const TOKEN_KEY = 'questrush_token'
 export const USER_KEY = 'questrush_user'
@@ -81,38 +86,43 @@ instance.interceptors.response.use(
     if (res.code === 0) {
       return res.data as never
     }
-    switch (res.code) {
-      case 401:
-        clearAuthAndGoLogin()
-        break
-      case 40301:
-        showVipDialog()
-        break
-      case 403:
-        message.error('无权限执行该操作')
-        break
-      case 422:
-        message.error(res.message || '参数校验失败')
-        break
-      default:
-        message.error(res.message || `请求失败（${res.code}）`)
+    const silent = Boolean((response.config as AppRequestConfig).silent)
+    // 401 与提示无关：登录态失效必须清掉，否则守卫会把人弹回首页
+    if (res.code === 401) {
+      clearAuthAndGoLogin()
+    } else if (!silent) {
+      switch (res.code) {
+        case 40301:
+          showVipDialog()
+          break
+        case 403:
+          message.error('无权限执行该操作')
+          break
+        case 422:
+          message.error(res.message || '参数校验失败')
+          break
+        default:
+          message.error(res.message || `请求失败（${res.code}）`)
+      }
     }
-    // 挂载完整返回体，供调用方读取扩展字段（如登录的 requireCaptcha）
+    // 挂载完整返回体，供调用方读取失败响应里的扩展字段
+    // （如登录失败时后端在 data 中回传 requireCaptcha，见 BizException 用法）
     const err = new Error(res.message || `请求失败（${res.code}）`)
     ;(err as unknown as { result?: Result }).result = res
     return Promise.reject(err)
   },
   (error) => {
+    const silent = Boolean((error?.config as AppRequestConfig | undefined)?.silent)
     if (error?.response) {
       const { status } = error.response
       if (status === 401) {
         clearAuthAndGoLogin()
-      } else if (status === 403) {
+      } else if (!silent && status === 403) {
         message.error('无权限访问')
-      } else {
+      } else if (!silent) {
         message.error(error.message || '网络异常，请稍后重试')
       }
-    } else {
+    } else if (!silent) {
       message.error('网络异常，请检查网络连接')
     }
     return Promise.reject(error)
@@ -120,8 +130,8 @@ instance.interceptors.response.use(
 )
 
 /** GET 请求，返回已解包的 data */
-export function get<T>(url: string, params?: object): Promise<T> {
-  return instance.get(url, { params }) as Promise<T>
+export function get<T>(url: string, params?: object, config?: AppRequestConfig): Promise<T> {
+  return instance.get(url, { ...config, params }) as Promise<T>
 }
 
 /** POST 请求 */
@@ -139,13 +149,6 @@ export function del<T>(url: string, params?: object): Promise<T> {
   return instance.delete(url, { params }) as Promise<T>
 }
 
-/** 文件上传 */
-export function upload<T>(url: string, formData: FormData): Promise<T> {
-  return instance.post(url, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }) as Promise<T>
-}
-
 /** 文件下载（携带 token），返回 Blob */
 export async function download(url: string, params?: object, filename?: string) {
   const resp = await instance.get(url, { params, responseType: 'blob' })
@@ -158,5 +161,3 @@ export async function download(url: string, params?: object, filename?: string) 
   document.body.removeChild(link)
   URL.revokeObjectURL(link.href)
 }
-
-export default instance

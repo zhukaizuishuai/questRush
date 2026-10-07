@@ -15,5 +15,3 @@ export function noteDetail(questionId: number) {
 export function noteList(params?: { pageNum?: number; pageSize?: number }) {
   return get<PageResult<NoteVO>>('/note/list', params)
 }
-
-export default { saveNote, noteDetail, noteList }

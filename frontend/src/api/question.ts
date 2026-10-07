@@ -30,5 +30,3 @@ export function questionDetail(id: number) {
 export function questionAnswer(id: number) {
   return get<QuestionAnswerVO>('/question/answer', { id })
 }
-
-export default { listQuestion, searchQuestion, questionDetail, questionAnswer }

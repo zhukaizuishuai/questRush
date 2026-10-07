@@ -27,11 +27,6 @@ export function difficultyTagType(d: number): 'default' | 'success' | 'warning' 
   return 'error'
 }
 
-/** 多选题答案归一化：拆字符、排序、拼接（BD 与 DB 等价） */
-export function normalizeMultiAnswer(answer: string): string {
-  return answer.split('').sort().join('')
-}
-
 /** 格式化时间 yyyy-MM-dd HH:mm */
 export function formatTime(time?: string | null): string {
   if (!time) return '-'

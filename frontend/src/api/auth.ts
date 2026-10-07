@@ -13,14 +13,13 @@ export interface LoginParams {
   captchaCode?: string
 }
 
-export interface LoginResult extends LoginVO {
-  /** 登录失败 ≥3 次后为 true，前端需展示验证码输入框 */
-  requireCaptcha?: boolean
-}
-
-/** 登录 */
+/**
+ * 登录。后端 LoginVO 只含 token + user（渐进式验证码是后端策略：
+ * 失败 ≥3 次才校验 captchaCode，前端登录页固定展示验证码输入框，
+ * 传了就在失败时校验、没传就不校验），故无需额外的扩展字段。
+ */
 export function login(data: LoginParams) {
-  return post<LoginResult>('/auth/login', data)
+  return post<LoginVO>('/auth/login', data)
 }
 
 export interface RegisterParams {
@@ -71,6 +70,3 @@ export function updatePassword(data: { oldPassword: string; newPassword: string 
 export function uploadAvatar(formData: FormData) {
   return post<string>('/user/avatar', formData)
 }
-
-export { getCaptcha as captcha }
-export default { getCaptcha, login, register, logout, getUserInfo, updateUser, updatePassword, uploadAvatar }

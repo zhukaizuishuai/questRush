@@ -4,5 +4,3 @@ import { post } from './request'
 export function toggleLike(questionId: number) {
   return post<{ liked: boolean; likeCount: number }>('/like/toggle', { questionId })
 }
-
-export default { toggleLike }

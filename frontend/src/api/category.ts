@@ -5,5 +5,3 @@ import type { CategoryVO } from '@/types'
 export function getCategoryTree() {
   return get<CategoryVO[]>('/category/list')
 }
-
-export default { getCategoryTree }

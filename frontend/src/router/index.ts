@@ -1,9 +1,13 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 
+/** 免登录的认证类页面：已登录访问时统一跳首页 */
+const PUBLIC_AUTH_PATHS = ['/login', '/register', '/forgot']
+
 const routes: RouteRecordRaw[] = [
   { path: '/login', name: 'login', component: () => import('@/views/login/LoginView.vue'), meta: { public: true } },
   { path: '/register', name: 'register', component: () => import('@/views/register/RegisterView.vue'), meta: { public: true } },
+  { path: '/forgot', name: 'forgotPassword', component: () => import('@/views/login/ForgotPasswordView.vue'), meta: { public: true } },
   {
     path: '/',
     component: () => import('@/components/MainLayout.vue'),
@@ -49,8 +53,9 @@ const router = createRouter({
 router.beforeEach((to) => {
   const userStore = useUserStore()
 
-  // 已登录用户访问登录/注册页 → 跳首页
-  if ((to.path === '/login' || to.path === '/register') && userStore.isLoggedIn) {
+  // 已登录用户访问登录/注册/找回密码页 → 跳首页
+  // 注意：这里必须把 /forgot 一并列出，否则已登录用户仍能看到重置密码表单
+  if (PUBLIC_AUTH_PATHS.includes(to.path) && userStore.isLoggedIn) {
     return { path: '/' }
   }
 

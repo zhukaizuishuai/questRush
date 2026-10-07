@@ -19,8 +19,6 @@ const form = reactive({
 })
 
 const loading = ref(false)
-/** 登录页始终显示验证码（产品调整 2026-09-27），后端「带了就校验」 */
-const showCaptcha = ref(true)
 const captcha = ref<CaptchaVO | null>(null)
 
 onMounted(refreshCaptcha)
@@ -34,13 +32,15 @@ async function onSubmit() {
     message.warning('请输入用户名和密码')
     return
   }
-  if (showCaptcha.value && !form.captchaCode) {
+  if (!form.captchaCode) {
     message.warning('请输入图形验证码')
     return
   }
   loading.value = true
   try {
-    await userStore.login(form.username, form.password, showCaptcha.value ? captcha.value?.captchaId : undefined, showCaptcha.value ? form.captchaCode : undefined)
+    // 始终携带验证码：后端策略是「带了就校验」（产品调整 2026-09-27，登录页固定展示验证码），
+    // 渐进式语义保留在服务端 —— 同一用户名失败 >= 3 次时，即使不传也会强制校验
+    await userStore.login(form.username, form.password, captcha.value?.captchaId, form.captchaCode)
     message.success('登录成功')
     const redirect = (route.query.redirect as string) || '/'
     router.push(redirect)
@@ -55,6 +55,10 @@ async function onSubmit() {
 
 function goRegister() {
   router.push('/register')
+}
+
+function goForgot() {
+  router.push('/forgot')
 }
 </script>
 
@@ -103,7 +107,7 @@ function goRegister() {
           <n-form-item>
             <n-input v-model:value="form.password" type="password" show-password-on="click" placeholder="密码" @keyup.enter="onSubmit" />
           </n-form-item>
-          <n-form-item v-if="showCaptcha">
+          <n-form-item>
             <div class="captcha-row" style="width: 100%">
               <n-input
                 v-model:value="form.captchaCode"
@@ -125,7 +129,11 @@ function goRegister() {
             登录
           </n-button>
         </n-form>
-        <p class="tips">还没有账号？<a class="link" @click="goRegister">立即注册</a></p>
+        <p class="tips">
+          还没有账号？<a class="link" @click="goRegister">立即注册</a>
+          <span class="divider">·</span>
+          <a class="link" @click="goForgot">忘记密码</a>
+        </p>
       </div>
     </div>
   </div>
@@ -242,6 +250,11 @@ function goRegister() {
   color: var(--brand-700);
   cursor: pointer;
   font-weight: 500;
+}
+
+.divider {
+  margin: 0 6px;
+  color: var(--ink-400);
 }
 
 /* 窄屏隐藏品牌面板，退化为居中卡片 */

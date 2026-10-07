@@ -20,5 +20,3 @@ export function payMock(orderNo: string) {
 export function myOrders(params?: { pageNum?: number; pageSize?: number }) {
   return get<PageResult<VipOrderVO>>('/vip/orders', params)
 }
-
-export default { getPlans, createOrder, payMock, myOrders }

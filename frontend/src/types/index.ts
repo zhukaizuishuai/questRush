@@ -45,7 +45,6 @@ export interface CategoryVO {
   name: string
   parentId: number
   sort: number
-  questionCount: number
   createTime: string
   children: CategoryVO[]
 }
@@ -117,10 +116,17 @@ export interface QuestionSubmitVO {
 
 /** 刷题会话创建参数 */
 export interface PracticeSessionDTO {
+  /**
+   * 选题来源：all 常规刷题（按分类/难度）；review 复习模式（从遗忘曲线队列选题）；
+   * wrong 错题重做模式。默认 all。
+   */
+  source?: 'all' | 'review' | 'wrong'
   categoryId: number | null
   mode: 'order' | 'random'
-  count: number
-  difficulty: QuestionDifficulty | null
+  /** 不传则由后端决定：常规刷题默认 20 题，复习/错题模式默认做完整队列 */
+  count?: number
+  /** 难度筛选，仅常规刷题模式使用（复习/错题模式由队列本身决定难度） */
+  difficulty?: QuestionDifficulty | null
 }
 
 /** 刷题会话 */
@@ -142,6 +148,19 @@ export interface WrongBookVO {
   wrongCount: number
   submitTime: string
   nextReviewTime: string | null
+}
+
+/**
+ * 错题本 / 复习队列分页返回。
+ * answerableCount 是**全队列**可作答条数（服务端已过滤下架/删除/无权限），
+ * 不是当前页数量 —— 前端判断「开始复习」能否点击必须用它，用当前页会误禁用。
+ */
+export interface WrongBookPage {
+  list: WrongBookVO[]
+  total: number
+  pageNum: number
+  pageSize: number
+  answerableCount: number
 }
 
 /** 统计 */

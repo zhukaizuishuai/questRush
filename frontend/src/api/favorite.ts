@@ -10,5 +10,3 @@ export function toggleFavorite(questionId: number) {
 export function favoriteList(params?: { pageNum?: number; pageSize?: number }) {
   return get<PageResult<FavoriteVO>>('/favorite/list', params)
 }
-
-export default { toggleFavorite, favoriteList }
