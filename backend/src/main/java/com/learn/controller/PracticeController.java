@@ -2,16 +2,14 @@ package com.learn.controller;
 
 import jakarta.annotation.Resource;
 import cn.dev33.satoken.stp.StpUtil;
-import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.learn.common.PageResult;
 import com.learn.common.Result;
 import com.learn.dto.PracticeSessionDTO;
 import com.learn.dto.SubmitDTO;
 import com.learn.service.PracticeService;
 import com.learn.vo.QuestionPracticeVO;
 import com.learn.vo.QuestionSubmitVO;
-import com.learn.vo.QuestionWrongVO;
 import com.learn.vo.StatsVO;
+import com.learn.vo.WrongBookPageVO;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -51,20 +49,18 @@ public class PracticeController {
         return Result.ok(practiceService.submit(dto, StpUtil.getLoginIdAsLong()));
     }
 
-    /** 错题本（越权条目脱敏，文档 4.1） */
+    /** 错题本（越权条目脱敏，文档 4.1）；附带全队列可作答条数 */
     @GetMapping("/wrong/list")
-    public Result<PageResult<QuestionWrongVO>> wrongList(@RequestParam(defaultValue = "1") long pageNum,
-                                                         @RequestParam(defaultValue = "10") long pageSize) {
-        IPage<QuestionWrongVO> page = practiceService.wrongBook(pageNum, pageSize, StpUtil.getLoginIdAsLong());
-        return Result.ok(PageResult.of(page, page.getRecords()));
+    public Result<WrongBookPageVO> wrongList(@RequestParam(defaultValue = "1") long pageNum,
+                                             @RequestParam(defaultValue = "10") long pageSize) {
+        return Result.ok(practiceService.wrongBook(pageNum, pageSize, StpUtil.getLoginIdAsLong()));
     }
 
-    /** 复习队列（mastered=0 且 next_review_time <= NOW()，文档 4.3） */
+    /** 复习队列（mastered=0 且 next_review_time <= NOW()，文档 4.3）；附带全队列可作答条数 */
     @GetMapping("/review/list")
-    public Result<PageResult<QuestionWrongVO>> reviewList(@RequestParam(defaultValue = "1") long pageNum,
-                                                          @RequestParam(defaultValue = "10") long pageSize) {
-        IPage<QuestionWrongVO> page = practiceService.reviewList(pageNum, pageSize, StpUtil.getLoginIdAsLong());
-        return Result.ok(PageResult.of(page, page.getRecords()));
+    public Result<WrongBookPageVO> reviewList(@RequestParam(defaultValue = "1") long pageNum,
+                                              @RequestParam(defaultValue = "10") long pageSize) {
+        return Result.ok(practiceService.reviewList(pageNum, pageSize, StpUtil.getLoginIdAsLong()));
     }
 
     /** 统计：总答题数、正确率、按分类正确率、连续打卡天数 */

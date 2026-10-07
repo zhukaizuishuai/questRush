@@ -10,6 +10,8 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.util.List;
+
 /**
  * 用户做题状态表 Mapper（文档 3.5 / 4.3）。
  * 写入统一 INSERT ... ON DUPLICATE KEY UPDATE，计数用 total_count = total_count + 1 原子累加（文档 4.3 并发提交）。
@@ -88,4 +90,36 @@ public interface UserQuestionRecordMapper extends BaseMapper<UserQuestionRecord>
             "WHERE r.user_id = #{userId} AND r.deleted = 0 AND r.mastered = 0 AND r.next_review_time IS NOT NULL AND r.next_review_time <= NOW() " +
             "ORDER BY r.next_review_time ASC")
     IPage<QuestionWrongVO> selectReviewQueue(Page<QuestionWrongVO> page, @Param("userId") Long userId);
+
+    /**
+     * 复习模式选题 id 列表（复习闭环用）：条件与 selectReviewQueue 一致，额外 INNER JOIN 题目表。
+     *
+     * 必须 join q 过滤的原因：复习队列是用户状态表，里面的题可能已被下架 / 删除，或用户 VIP 已过期。
+     * 若不过滤就放进刷题会话，PracticeServiceImpl#next 调 checker.checkReadable 会抛 403/404，
+     * 整个复习流程在第 N 题卡死。INNER JOIN 同时天然排除 q.deleted=1 的行。
+     * vipFilter=true（用户无 VIP 权限）时排除 VIP 题，与文档 4.1「权限优先」一致。
+     * 排序 next_review_time ASC：越早到期的越先复习。
+     */
+    @Select("<script>" +
+            "SELECT r.question_id FROM user_question_record r " +
+            "INNER JOIN question q ON q.id = r.question_id AND q.deleted = 0 AND q.status = 1 " +
+            "WHERE r.user_id = #{userId} AND r.deleted = 0 AND r.mastered = 0 " +
+            "AND r.next_review_time IS NOT NULL AND r.next_review_time &lt;= NOW() " +
+            "<if test='vipFilter'> AND q.is_vip = 0</if>" +
+            " ORDER BY r.next_review_time ASC" +
+            "</script>")
+    List<Long> selectReviewIds(@Param("userId") Long userId, @Param("vipFilter") boolean vipFilter);
+
+    /**
+     * 错题重做模式选题 id 列表：条件与 selectWrongBook 一致（mastered=0 AND is_correct=0），同样 INNER JOIN 题目表过滤。
+     * 排序按最近作答时间倒序，与错题本列表顺序一致，用户重做时看到的顺序和列表里相同。
+     */
+    @Select("<script>" +
+            "SELECT r.question_id FROM user_question_record r " +
+            "INNER JOIN question q ON q.id = r.question_id AND q.deleted = 0 AND q.status = 1 " +
+            "WHERE r.user_id = #{userId} AND r.deleted = 0 AND r.mastered = 0 AND r.is_correct = 0 " +
+            "<if test='vipFilter'> AND q.is_vip = 0</if>" +
+            " ORDER BY r.submit_time DESC" +
+            "</script>")
+    List<Long> selectWrongIds(@Param("userId") Long userId, @Param("vipFilter") boolean vipFilter);
 }

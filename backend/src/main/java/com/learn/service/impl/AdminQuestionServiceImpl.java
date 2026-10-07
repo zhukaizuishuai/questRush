@@ -17,6 +17,7 @@ import com.learn.mapper.UserMapper;
 import com.learn.service.AdminQuestionService;
 import com.learn.util.Md5Util;
 import com.learn.util.PageUtil;
+import com.learn.vo.AdminStatsVO;
 import com.learn.vo.QuestionAdminVO;
 import com.learn.vo.QuestionOptionVO;
 import jakarta.annotation.Resource;
@@ -123,14 +124,14 @@ public class AdminQuestionServiceImpl implements AdminQuestionService {
     }
 
     @Override
-    public Map<String, Object> stats() {
-        Map<String, Object> result = new java.util.HashMap<>();
-        result.put("userCount", userMapper.selectCount(null));
-        result.put("questionCount", questionMapper.selectCount(null));
-        result.put("vipUserCount", userMapper.countVipUsers());
+    public AdminStatsVO stats() {
+        AdminStatsVO vo = new AdminStatsVO();
+        vo.setUserCount(userMapper.selectCount(null));
+        vo.setQuestionCount(questionMapper.selectCount(null));
+        vo.setVipUserCount(userMapper.countVipUsers());
         Double dailyAvg = answerLogMapper.selectDailyAvg();
-        result.put("dailyAvgAnswers", dailyAvg == null ? 0.0 : Math.round(dailyAvg * 10.0) / 10.0);
-        return result;
+        vo.setDailyAvgAnswers(dailyAvg == null ? 0.0 : Math.round(dailyAvg * 10.0) / 10.0);
+        return vo;
     }
 
     // ---------- 私有方法 ----------

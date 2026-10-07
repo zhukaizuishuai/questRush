@@ -22,6 +22,7 @@ import com.learn.vo.QuestionPracticeVO;
 import com.learn.vo.QuestionSubmitVO;
 import com.learn.vo.QuestionWrongVO;
 import com.learn.vo.StatsVO;
+import com.learn.vo.WrongBookPageVO;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -78,17 +79,35 @@ public class PracticeServiceImpl implements PracticeService {
 
     @Override
     public Map<String, Object> createSession(PracticeSessionDTO dto, Long userId) {
-        List<Long> categoryIds = questionService.resolveCategoryIds(dto.getCategoryId());
+        String source = dto.getSource() == null ? "all" : dto.getSource();
         boolean vipFilter = !checker.canReadVip(userId);
-        // 权限过滤已在 SQL 完成：无 VIP 权限的用户选不到 VIP 题
-        List<Long> ids = questionMapper.selectReadableIds(categoryIds, dto.getDifficulty(), vipFilter);
-        if (ids == null || ids.isEmpty()) {
-            throw new BizException(ResultCode.PARAM_ERROR, "该条件下暂无可刷题目");
+        List<Long> ids;
+        if ("review".equals(source)) {
+            // 复习模式：从遗忘曲线队列选题，SQL 已过滤下架/删除/无权限题目，越早到期越先复习
+            ids = recordMapper.selectReviewIds(userId, vipFilter);
+            if (ids == null || ids.isEmpty()) {
+                throw new BizException(ResultCode.PARAM_ERROR, "当前没有到期待复习的题目");
+            }
+        } else if ("wrong".equals(source)) {
+            // 错题重做模式：从错题本选题
+            ids = recordMapper.selectWrongIds(userId, vipFilter);
+            if (ids == null || ids.isEmpty()) {
+                throw new BizException(ResultCode.PARAM_ERROR, "错题本是空的，没有需要重做的题目");
+            }
+        } else {
+            // 常规刷题：权限过滤已在 SQL 完成，无 VIP 权限的用户选不到 VIP 题
+            List<Long> categoryIds = questionService.resolveCategoryIds(dto.getCategoryId());
+            ids = questionMapper.selectReadableIds(categoryIds, dto.getDifficulty(), vipFilter);
+            if (ids == null || ids.isEmpty()) {
+                throw new BizException(ResultCode.PARAM_ERROR, "该条件下暂无可刷题目");
+            }
         }
         if ("random".equals(dto.getMode())) {
             Collections.shuffle(ids);
         }
-        int count = dto.getCount() == null ? 20 : dto.getCount();
+        // 复习 / 错题模式由用户显式发起，默认一次做完整个队列（count 不传即不截断）；
+        // 常规刷题保持默认 20 题，避免一次拉取过多。
+        int count = dto.getCount() != null ? dto.getCount() : ("all".equals(source) ? 20 : Integer.MAX_VALUE);
         if (ids.size() > count) {
             ids = new ArrayList<>(ids.subList(0, count));
         }
@@ -184,19 +203,35 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     @Override
-    public IPage<QuestionWrongVO> wrongBook(long pageNum, long pageSize, Long userId) {
+    public WrongBookPageVO wrongBook(long pageNum, long pageSize, Long userId) {
         Page<QuestionWrongVO> page = new Page<>(PageUtil.num(pageNum), PageUtil.size(pageSize));
         IPage<QuestionWrongVO> result = recordMapper.selectWrongBook(page, userId);
         maskUnauthorized(result.getRecords(), userId);
-        return result;
+        // 复用选题 SQL 统计全队列可作答数：与「开始复习」实际能取到的题数严格同口径
+        boolean vipFilter = !checker.canReadVip(userId);
+        long answerable = recordMapper.selectWrongIds(userId, vipFilter).size();
+        return buildWrongBookPage(result, answerable);
     }
 
     @Override
-    public IPage<QuestionWrongVO> reviewList(long pageNum, long pageSize, Long userId) {
+    public WrongBookPageVO reviewList(long pageNum, long pageSize, Long userId) {
         Page<QuestionWrongVO> page = new Page<>(PageUtil.num(pageNum), PageUtil.size(pageSize));
         IPage<QuestionWrongVO> result = recordMapper.selectReviewQueue(page, userId);
         maskUnauthorized(result.getRecords(), userId);
-        return result;
+        // 同上：与复习会话的选题 SQL 完全一致，避免前端按分页估算
+        boolean vipFilter = !checker.canReadVip(userId);
+        long answerable = recordMapper.selectReviewIds(userId, vipFilter).size();
+        return buildWrongBookPage(result, answerable);
+    }
+
+    private WrongBookPageVO buildWrongBookPage(IPage<QuestionWrongVO> page, long answerableCount) {
+        WrongBookPageVO vo = new WrongBookPageVO();
+        vo.setList(page.getRecords());
+        vo.setTotal(page.getTotal());
+        vo.setPageNum(page.getCurrent());
+        vo.setPageSize(page.getSize());
+        vo.setAnswerableCount(answerableCount);
+        return vo;
     }
 
     /**

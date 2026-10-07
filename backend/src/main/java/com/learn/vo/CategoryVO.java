@@ -16,7 +16,6 @@ public class CategoryVO {
     private String name;
     private Long parentId;
     private Integer sort;
-    private Integer questionCount;
     private LocalDateTime createTime;
 
     private List<CategoryVO> children = new ArrayList<>();

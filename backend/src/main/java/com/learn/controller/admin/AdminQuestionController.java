@@ -8,6 +8,7 @@ import com.learn.dto.QuestionSaveDTO;
 import com.learn.dto.QuestionStatusDTO;
 import com.learn.service.AdminQuestionService;
 import com.learn.service.QuestionExcelService;
+import com.learn.vo.AdminStatsVO;
 import com.learn.vo.ImportResultVO;
 import com.learn.vo.QuestionAdminVO;
 import jakarta.servlet.http.HttpServletResponse;
@@ -125,7 +126,7 @@ public class AdminQuestionController {
 
     /** 数据统计：用户数、题目数、VIP 用户数、日均答题量（文档 6.4） */
     @GetMapping("/stats")
-    public Result<Map<String, Object>> stats() {
+    public Result<AdminStatsVO> stats() {
         return Result.ok(adminQuestionService.stats());
     }
 }
